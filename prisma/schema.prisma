@@ -1,0 +1,292 @@
+// ==============================================================================
+// JIN SANSKAR SETU (जिन संस्कार सेतु) - Prisma Schema
+// PostgreSQL is the SINGLE SOURCE OF TRUTH
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  VOLUNTEER
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum RecordStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum Relationship {
+  HEAD
+  SPOUSE
+  SON
+  DAUGHTER
+  FATHER
+  MOTHER
+  BROTHER
+  SISTER
+  GRANDFATHER
+  GRANDMOTHER
+  GRANDCHILD
+  OTHER
+}
+
+enum PathshalaStatus {
+  YES
+  NO
+  PREVIOUSLY_ATTENDED
+  UNKNOWN
+}
+
+enum PathshalaInterest {
+  YES
+  MAYBE
+  NO
+  UNKNOWN
+}
+
+enum PreferredDay {
+  SATURDAY
+  SUNDAY
+  WEEKDAY
+  NO_PREFERENCE
+}
+
+enum PreferredTime {
+  MORNING
+  AFTERNOON
+  EVENING
+  NO_PREFERENCE
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+// ------------------------------------------------------------------------------
+// USERS
+// Only pre-authorized users added by an administrator may access the application.
+// ------------------------------------------------------------------------------
+
+model User {
+  id           String      @id @default(cuid())
+  username     String      @unique // Unique login username
+  passwordHash String      // bcrypt hashed password
+  name         String?
+  email        String?     @unique // Optional contact email
+  image        String?
+  role         Role        @default(VOLUNTEER)
+  status       UserStatus  @default(ACTIVE)
+  sanghId      String?
+  sangh        Sangh?      @relation(fields: [sanghId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  lastLoginAt  DateTime?
+  createdBy    String?
+
+  @@index([username])
+  @@index([status])
+  @@index([sanghId])
+  @@map("users")
+}
+
+// ------------------------------------------------------------------------------
+// SANGHS
+// Exactly six sanghs are seeded: MSJS, SAJS, SSJS, SKJS, EJS, NJS
+// ------------------------------------------------------------------------------
+
+model Sangh {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  prefix    String     @unique // MSJS, SAJS, SSJS, SKJS, EJS, NJS
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  users     User[]
+  families  Family[]
+  members   Member[]
+  idCounter IdCounter?
+
+  @@index([prefix])
+  @@map("sanghs")
+}
+
+// ------------------------------------------------------------------------------
+// FAMILIES
+// Represents a Jain family unit.
+// ------------------------------------------------------------------------------
+
+model Family {
+  id               String       @id @default(cuid())
+  familyId         String       @unique // e.g., FAM-000001
+  headMemberId     String?      // Resolved after head member record is created
+  headName         String
+  mobile           String
+  normalizedMobile String       // Stripped of spaces, hyphens, prefixes
+  address          String
+  area             String
+  sanghId          String
+  sangh            Sangh        @relation(fields: [sanghId], references: [id], onDelete: Restrict)
+  status           RecordStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  createdBy        String?
+  updatedBy        String?
+
+  members          Member[]
+
+  @@index([familyId])
+  @@index([normalizedMobile])
+  @@index([sanghId])
+  @@index([area])
+  @@index([status])
+  @@index([normalizedMobile, sanghId])
+  @@map("families")
+}
+
+// ------------------------------------------------------------------------------
+// MEMBERS
+// Individual members belonging to a family. Head of family is also a member.
+// ------------------------------------------------------------------------------
+
+model Member {
+  id                String            @id @default(cuid())
+  memberId          String            @unique // e.g., MSJS-000001
+  familyId          String
+  family            Family            @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  sanghId           String
+  sangh             Sangh             @relation(fields: [sanghId], references: [id], onDelete: Restrict)
+  name              String
+  normalizedName    String
+  age               Int
+  gender            Gender
+  relationship      Relationship
+  pathshalaStatus   PathshalaStatus   @default(UNKNOWN)
+  pathshalaInterest PathshalaInterest @default(UNKNOWN)
+  preferredDay      PreferredDay      @default(NO_PREFERENCE)
+  preferredTime     PreferredTime     @default(NO_PREFERENCE)
+  preferredWeekdays String?           // Comma-separated list of selected weekdays if preferredDay is WEEKDAY
+  transportPreference String?         // PICK_AND_DROP, BY_SELF
+  noInterestReason    String?         // Comment/reason if pathshalaInterest is NO
+  status            RecordStatus      @default(ACTIVE)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  createdBy         String?
+  updatedBy         String?
+
+  sheetSync         GoogleSheetSync?
+
+  @@index([memberId])
+  @@index([familyId])
+  @@index([sanghId])
+  @@index([normalizedName])
+  @@index([age])
+  @@index([gender])
+  @@index([pathshalaStatus])
+  @@index([pathshalaInterest])
+  @@index([status])
+  @@index([createdAt])
+  @@index([sanghId, age])
+  @@index([sanghId, pathshalaStatus])
+  @@index([familyId, normalizedName])
+  @@map("members")
+}
+
+// ------------------------------------------------------------------------------
+// ID COUNTERS
+// Independent atomic counter per Sangh for member IDs (PREFIX-000001)
+// ------------------------------------------------------------------------------
+
+model IdCounter {
+  id         String   @id @default(cuid())
+  sanghId    String   @unique
+  sangh      Sangh    @relation(fields: [sanghId], references: [id], onDelete: Cascade)
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@index([sanghId])
+  @@map("id_counters")
+}
+
+// ------------------------------------------------------------------------------
+// FAMILY ID COUNTER
+// Global sequence counter for Family IDs (FAM-000001)
+// ------------------------------------------------------------------------------
+
+model FamilyIdCounter {
+  id         String   @id @default("GLOBAL_FAMILY_COUNTER")
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@map("family_id_counters")
+}
+
+// ------------------------------------------------------------------------------
+// AUDIT LOGS
+// Complete immutable audit trail of all operational events
+// ------------------------------------------------------------------------------
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String   // FAMILY_CREATED, FAMILY_ARCHIVED, MEMBER_CREATED, etc.
+  entityType  String   // Family, Member, User, Sync, Export
+  entityId    String
+  performedBy String   // User email or ID
+  performedAt DateTime @default(now())
+  metadata    Json?    // Contextual payload
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([performedBy])
+  @@index([performedAt])
+  @@map("audit_logs")
+}
+
+// ------------------------------------------------------------------------------
+// GOOGLE SHEET SYNC
+// Tracks sync status for each member to the single synchronized Google Sheet.
+// Failure does NOT rollback PostgreSQL transactions.
+// ------------------------------------------------------------------------------
+
+model GoogleSheetSync {
+  id                 String     @id @default(cuid())
+  memberId           String     @unique
+  member             Member     @relation(fields: [memberId], references: [memberId], onDelete: Cascade)
+  status             SyncStatus @default(PENDING)
+  sheetRowReference  String?    // Row index or A1 notation in Sheet
+  lastAttemptAt      DateTime?
+  syncedAt           DateTime?
+  errorMessage       String?
+  retryCount         Int        @default(0)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([status])
+  @@index([memberId])
+  @@map("google_sheet_sync")
+}

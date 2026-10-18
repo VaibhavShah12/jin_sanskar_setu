@@ -1,0 +1,44 @@
+<svg width="128" height="128" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFF9E6" />
+      <stop offset="65%" stop-color="#FFE082" />
+      <stop offset="100%" stop-color="#FFB300" />
+    </radialGradient>
+    <linearGradient id="goldSaffronGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8F00" />
+      <stop offset="50%" stop-color="#FFA000" />
+      <stop offset="100%" stop-color="#D84315" />
+    </linearGradient>
+    <linearGradient id="shimmerGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF8E1" />
+      <stop offset="100%" stop-color="#FFC107" />
+    </linearGradient>
+    <radialGradient id="centerGem" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFEB3B" />
+      <stop offset="70%" stop-color="#FF6F00" />
+      <stop offset="100%" stop-color="#BF360C" />
+    </radialGradient>
+  </defs>
+
+  <circle cx="50" cy="50" r="47" fill="url(#auraGrad)" stroke="#FF8F00" stroke-width="2.5" />
+  <circle cx="50" cy="50" r="43" fill="none" stroke="#FFA000" stroke-width="1" stroke-dasharray="3 2" />
+
+  <path d="M 50 68 C 30 68 18 52 24 38 C 32 44 42 55 50 68 Z" fill="url(#goldSaffronGrad)" opacity="0.9" />
+  <path d="M 50 68 C 70 68 82 52 76 38 C 68 44 58 55 50 68 Z" fill="url(#goldSaffronGrad)" opacity="0.9" />
+
+  <path d="M 50 72 C 34 65 24 45 34 26 C 42 38 46 54 50 72 Z" fill="url(#goldSaffronGrad)" />
+  <path d="M 50 72 C 66 65 76 45 66 26 C 58 38 54 54 50 72 Z" fill="url(#goldSaffronGrad)" />
+
+  <path d="M 50 16 C 55 28 58 48 50 74 C 42 48 45 28 50 16 Z" fill="url(#shimmerGold)" stroke="#E65100" stroke-width="1.2" />
+  <path d="M 50 22 C 53 32 54 44 50 56 C 46 44 47 32 50 22 Z" fill="#FFFDE7" opacity="0.85" />
+
+  <path d="M 32 73 C 40 70 60 70 68 73 C 65 82 35 82 32 73 Z" fill="#D84315" />
+  <path d="M 38 79 C 45 78 55 78 62 79 C 60 84 40 84 38 79 Z" fill="#FFB300" />
+
+  <circle cx="50" cy="58" r="6" fill="url(#centerGem)" stroke="#FFF" stroke-width="1.2" />
+
+  <line x1="50" y1="6" x2="50" y2="12" stroke="#FF6F00" stroke-width="2" stroke-linecap="round" />
+  <line x1="40" y1="8" x2="43" y2="13" stroke="#FF8F00" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="60" y1="8" x2="57" y2="13" stroke="#FF8F00" stroke-width="1.5" stroke-linecap="round" />
+</svg>

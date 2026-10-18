@@ -1,0 +1,265 @@
+@import "bootstrap/dist/css/bootstrap.min.css";
+@import "bootstrap-icons/font/bootstrap-icons.css";
+
+/* ==========================================================================
+   JIN SANSKAR SETU (जिन संस्कार सेतु)
+   Peaceful, trustworthy, modern, mobile-first design system
+   ========================================================================== */
+
+:root {
+  --primary-jain: #b45309; /* Warm sacred saffron / amber-700 */
+  --primary-jain-light: #fef3c7; /* Amber-100 */
+  --primary-jain-dark: #78350f; /* Amber-900 */
+  --accent-gold: #d97706; /* Amber-600 */
+  --accent-teal: #0f766e; /* Peaceful Teal for Pathshala / Education */
+  --accent-teal-light: #ccfbf1;
+  --bg-warm: #faf9f6; /* Calming ivory tint */
+  --surface-card: #ffffff;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --border-subtle: #e2e8f0;
+  --border-warm: #fde68a;
+  --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-elevated: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg-warm);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  flex: 1;
+}
+
+/* Accessible touch targets & mobile enhancements */
+button, 
+.btn, 
+.form-control, 
+.form-select, 
+.nav-link {
+  min-height: 44px;
+}
+
+@media (pointer: coarse) {
+  button, 
+  .btn, 
+  .form-control, 
+  .form-select {
+    min-height: 48px;
+    font-size: 1rem;
+  }
+}
+
+/* Custom Jain Brand Header & Cards */
+.brand-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--primary-jain-dark);
+}
+
+.brand-hindi {
+  font-weight: 600;
+  color: var(--primary-jain);
+  font-size: 0.9em;
+}
+
+.card-clean {
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-clean:hover {
+  box-shadow: var(--shadow-elevated);
+}
+
+.card-accent-top {
+  border-top: 4px solid var(--primary-jain);
+}
+
+.badge-sangh {
+  background-color: var(--primary-jain-light);
+  color: var(--primary-jain-dark);
+  border: 1px solid var(--border-warm);
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* Buttons */
+.btn-jain-primary {
+  background-color: var(--primary-jain);
+  border-color: var(--primary-jain);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(180, 83, 9, 0.2);
+}
+
+.btn-jain-primary:hover,
+.btn-jain-primary:focus {
+  background-color: var(--primary-jain-dark);
+  border-color: var(--primary-jain-dark);
+  color: #ffffff;
+}
+
+.btn-jain-outline {
+  border: 1.5px solid var(--primary-jain);
+  color: var(--primary-jain);
+  font-weight: 600;
+  border-radius: 8px;
+  background-color: transparent;
+}
+
+.btn-jain-outline:hover,
+.btn-jain-outline:focus {
+  background-color: var(--primary-jain-light);
+  color: var(--primary-jain-dark);
+  border-color: var(--primary-jain);
+}
+
+/* Accessible focus outlines */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--accent-gold) !important;
+  outline-offset: 2px !important;
+  border-color: var(--accent-gold) !important;
+  box-shadow: none !important;
+}
+
+/* Mobile Stepper / Progress Bar */
+.form-step-indicator {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.form-step-item {
+  flex: 1;
+  text-align: center;
+  position: relative;
+}
+
+.form-step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #e2e8f0;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.form-step-active .form-step-circle {
+  background-color: var(--primary-jain);
+  color: #ffffff;
+  box-shadow: 0 0 0 4px var(--primary-jain-light);
+}
+
+.form-step-completed .form-step-circle {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+.form-step-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+  display: block;
+}
+
+.form-step-active .form-step-label {
+  color: var(--primary-jain-dark);
+  font-weight: 700;
+}
+
+/* Bottom Navigation Bar for Mobile */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-around;
+  padding: 6px 0;
+  z-index: 1030;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.mobile-bottom-item {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.mobile-bottom-item.active {
+  color: var(--primary-jain);
+  font-weight: 700;
+}
+
+.mobile-bottom-item i {
+  font-size: 1.25rem;
+  margin-bottom: 2px;
+}
+
+/* Quick Add FAB (Floating Action Button) for Mobile */
+.mobile-fab-add {
+  position: fixed;
+  bottom: 70px;
+  right: 20px;
+  z-index: 1040;
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
+  background-color: var(--primary-jain);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(180, 83, 9, 0.4);
+  text-decoration: none;
+  font-size: 1.5rem;
+  transition: transform 0.2s ease;
+}
+
+.mobile-fab-add:hover,
+.mobile-fab-add:focus {
+  transform: scale(1.05);
+  color: #ffffff;
+}
+
+@media (min-width: 992px) {
+  .mobile-bottom-nav,
+  .mobile-fab-add {
+    display: none !important;
+  }
+}
+
+@media (max-width: 991.98px) {
+  body {
+    padding-bottom: 70px; /* offset for bottom bar */
+  }
+}
