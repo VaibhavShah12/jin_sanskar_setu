@@ -111,35 +111,7 @@ export default async function AnalyticsPage() {
     },
   ];
 
-  // 5. Children by Pathshala Interest (<18)
-  const pathshalaInterestGroup = await prisma.member.groupBy({
-    by: ["pathshalaInterest"],
-    where: { status: "ACTIVE", age: { lt: 18 }, ...sanghFilter },
-    _count: { id: true },
-  });
 
-  const childrenByPathshalaInterest = [
-    {
-      name: "Interested",
-      interest: "YES",
-      count: pathshalaInterestGroup.find((g) => g.pathshalaInterest === "YES")?._count.id || 0,
-    },
-    {
-      name: "Maybe",
-      interest: "MAYBE",
-      count: pathshalaInterestGroup.find((g) => g.pathshalaInterest === "MAYBE")?._count.id || 0,
-    },
-    {
-      name: "Not Interested",
-      interest: "NO",
-      count: pathshalaInterestGroup.find((g) => g.pathshalaInterest === "NO")?._count.id || 0,
-    },
-    {
-      name: "Unknown",
-      interest: "UNKNOWN",
-      count: pathshalaInterestGroup.find((g) => g.pathshalaInterest === "UNKNOWN")?._count.id || 0,
-    },
-  ];
 
   // 6. Top 5 Areas by Members
   const areaGroup = await prisma.family.groupBy({
@@ -193,7 +165,6 @@ export default async function AnalyticsPage() {
     familiesBySangh,
     membersByAgeGroup,
     childrenByPathshalaStatus,
-    childrenByPathshalaInterest,
     membersByArea,
     registrationsOverTime,
     childrenBySangh,

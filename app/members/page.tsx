@@ -2,6 +2,7 @@ import { requireAuth, getSanghAccessFilter } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
+import { getMemberCalculatedAge } from "@/lib/validation/family";
 import React from "react";
 
 export const dynamic = "force-dynamic";
@@ -80,10 +81,12 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
             Registered Sangh community members • Total active members: {totalCount}
           </p>
         </div>
-        <Link href="/families/new" className="btn btn-jain-primary d-flex align-items-center gap-2 px-3 shadow-sm">
-          <i className="bi bi-person-plus-fill"></i>
-          <span>Add Family &amp; Members</span>
-        </Link>
+        {user.role !== "TRUSTEE" && (
+          <Link href="/families/new" className="btn btn-jain-primary d-flex align-items-center gap-2 px-3 shadow-sm">
+            <i className="bi bi-person-plus-fill"></i>
+            <span>Add Family &amp; Members</span>
+          </Link>
+        )}
       </div>
 
       {/* Filter Bar */}
@@ -104,7 +107,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
               name="sanghId"
               defaultValue={requestedSanghId || ""}
               className="form-select"
-              disabled={user.role === "VOLUNTEER" && !!user.sanghId}
+              disabled={(user.role === "VOLUNTEER" && !!user.sanghId) || user.role === "TRUSTEE"}
             >
               <option value="">All Sanghs</option>
               {sanghs.map((s) => (
@@ -158,19 +161,22 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                   <tr>
                     <th className="ps-4">Member ID</th>
                     <th>Name</th>
-                    <th>Age</th>
+                    <th>Age / DOB</th>
                     <th>Gender</th>
                     <th>Relationship</th>
                     <th>Family ID</th>
                     <th>Sangh</th>
                     <th>Pathshala</th>
-                    <th>Interest</th>
                     <th className="text-end pe-4">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {members.map((m) => {
-                    const isChild = m.age < 18;
+                    const calculatedAge = getMemberCalculatedAge(m);
+                    const isChild = calculatedAge < 18;
+                    const dobString = m.dateOfBirth
+                      ? new Date(m.dateOfBirth).toISOString().split("T")[0]
+                      : null;
                     return (
                       <tr key={m.id} className={isChild ? "table-warning-subtle" : ""}>
                         <td className="ps-4">
@@ -185,7 +191,11 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                           )}
                         </td>
                         <td>
-                          {m.age} {isChild && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                          <span className="fw-semibold">{calculatedAge} yrs</span>
+                          {isChild && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                          {dobString && (
+                            <div className="small text-muted font-monospace">{dobString}</div>
+                          )}
                         </td>
                         <td className="text-capitalize">{m.gender.toLowerCase()}</td>
                         <td>{m.relationship}</td>
@@ -198,7 +208,6 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                           <span className="badge-sangh font-monospace">{m.sangh.prefix}</span>
                         </td>
                         <td><StatusBadge type="pathshala" value={m.pathshalaStatus} /></td>
-                        <td><StatusBadge type="interest" value={m.pathshalaInterest} /></td>
                         <td className="text-end pe-4">
                           <Link href={`/members/${m.id}`} className="btn btn-outline-secondary btn-sm">
                             View
@@ -214,31 +223,39 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
 
           {/* Mobile Cards */}
           <div className="d-lg-none d-flex flex-column gap-3 mb-4">
-            {members.map((m) => (
-              <div key={m.id} className="card-clean p-3">
-                <div className="d-flex justify-content-between align-items-start mb-2">
-                  <div>
-                    <Link href={`/members/${m.id}`} className="font-monospace fw-bold text-primary fs-6 text-decoration-none">
-                      {m.memberId}
-                    </Link>
-                    <h6 className="fw-bold text-dark mb-0 mt-1">{m.name}</h6>
+            {members.map((m) => {
+              const calculatedAge = getMemberCalculatedAge(m);
+              const dobString = m.dateOfBirth
+                ? new Date(m.dateOfBirth).toISOString().split("T")[0]
+                : null;
+              return (
+                <div key={m.id} className="card-clean p-3">
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <Link href={`/members/${m.id}`} className="font-monospace fw-bold text-primary fs-6 text-decoration-none">
+                        {m.memberId}
+                      </Link>
+                      <h6 className="fw-bold text-dark mb-0 mt-1">{m.name}</h6>
+                    </div>
+                    <span className="badge-sangh font-monospace">{m.sangh.prefix}</span>
                   </div>
-                  <span className="badge-sangh font-monospace">{m.sangh.prefix}</span>
-                </div>
 
-                <div className="small text-secondary mb-2">
-                  <div>Family: <Link href={`/families/${m.familyId}`} className="font-monospace fw-bold text-decoration-none">{m.family.familyId}</Link> ({m.family.headName})</div>
-                  <div>Age: {m.age} • Gender: {m.gender} • Rel: {m.relationship}</div>
-                </div>
+                  <div className="small text-secondary mb-2">
+                    <div>Family: <Link href={`/families/${m.familyId}`} className="font-monospace fw-bold text-decoration-none">{m.family.familyId}</Link> ({m.family.headName})</div>
+                    <div>
+                      Age: {calculatedAge} yrs {dobString && `(DOB: ${dobString})`} • Gender: {m.gender} • Rel: {m.relationship}
+                    </div>
+                  </div>
 
-                <div className="d-flex justify-content-between align-items-center pt-2 border-top">
-                  <StatusBadge type="pathshala" value={m.pathshalaStatus} />
-                  <Link href={`/members/${m.id}`} className="btn btn-outline-primary btn-sm">
-                    View Profile
-                  </Link>
+                  <div className="d-flex justify-content-between align-items-center pt-2 border-top">
+                    <StatusBadge type="pathshala" value={m.pathshalaStatus} />
+                    <Link href={`/members/${m.id}`} className="btn btn-outline-primary btn-sm">
+                      View Profile
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination */}

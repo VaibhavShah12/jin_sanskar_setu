@@ -6,6 +6,7 @@ import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import { archiveFamilyAction, archiveMemberAction } from "@/lib/actions/family-actions";
+import { getMemberCalculatedAge } from "@/lib/validation/family";
 
 interface FamilyDetailClientProps {
   family: any;
@@ -145,19 +146,23 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
               <tr>
                 <th className="ps-4">Member ID</th>
                 <th>Name</th>
-                <th>Age</th>
+                <th>Age / DOB</th>
                 <th>Gender</th>
                 <th>Relationship</th>
                 <th>Pathshala Status</th>
-                <th>Interest</th>
-                <th>Conveyance / Note</th>
+                <th>Conveyance</th>
                 <th>Preferred Schedule</th>
                 <th className="text-end pe-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {family.members.map((m: any) => {
-                const isChild = m.age < 18;
+                const calculatedAge = getMemberCalculatedAge(m);
+                const isChild = calculatedAge < 18;
+                const dobString = m.dateOfBirth
+                  ? new Date(m.dateOfBirth).toISOString().split("T")[0]
+                  : null;
+
                 return (
                   <tr key={m.id} className={isChild ? "table-warning-subtle" : ""}>
                     <td className="ps-4">
@@ -175,24 +180,27 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                       )}
                     </td>
                     <td>
-                      {m.age} {isChild && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                      <span className="fw-semibold text-dark">{calculatedAge} yrs</span>
+                      {isChild && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                      {dobString && (
+                        <div className="small text-muted font-monospace">{dobString}</div>
+                      )}
                     </td>
                     <td className="text-capitalize">{m.gender.toLowerCase().replace(/_/g, " ")}</td>
                     <td>{m.relationship}</td>
                     <td><StatusBadge type="pathshala" value={m.pathshalaStatus} /></td>
-                    <td><StatusBadge type="interest" value={m.pathshalaInterest} /></td>
                     <td>
-                      {m.pathshalaInterest === "YES" && (
+                      {m.transportPreference === "PICK_AND_DROP" ? (
                         <span className="badge bg-success-subtle text-success border border-success-subtle">
-                          {m.transportPreference === "PICK_AND_DROP" ? "🚐 Pick & Drop" : "🚶 By Self"}
+                          🚐 Pick &amp; Drop
                         </span>
-                      )}
-                      {m.pathshalaInterest === "NO" && (
-                        <span className="small text-danger" title={m.noInterestReason || ""}>
-                          {m.noInterestReason ? `Reason: ${m.noInterestReason}` : "No reason provided"}
+                      ) : m.transportPreference === "BY_SELF" ? (
+                        <span className="badge bg-light text-dark border">
+                          🚶 By Self
                         </span>
+                      ) : (
+                        "—"
                       )}
-                      {m.pathshalaInterest !== "YES" && m.pathshalaInterest !== "NO" && "—"}
                     </td>
                     <td className="small text-muted">
                       {m.preferredDay === "WEEKDAY" && m.preferredWeekdays ? (
@@ -234,7 +242,12 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
       {/* Mobile Cards View */}
       <div className="d-lg-none d-flex flex-column gap-3 mb-4">
         {family.members.map((m: any) => {
-          const isChild = m.age < 18;
+          const calculatedAge = getMemberCalculatedAge(m);
+          const isChild = calculatedAge < 18;
+          const dobString = m.dateOfBirth
+            ? new Date(m.dateOfBirth).toISOString().split("T")[0]
+            : null;
+
           return (
             <div key={m.id} className={`card-clean p-3 ${isChild ? "border-warning" : ""}`}>
               <div className="d-flex justify-content-between align-items-start mb-2">
@@ -247,9 +260,14 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                     {m.status === "ARCHIVED" && <span className="badge bg-secondary ms-1">Archived</span>}
                   </h6>
                 </div>
-                <span className="badge bg-light text-secondary border">
-                  {m.relationship} • {m.age} yrs
-                </span>
+                <div className="text-end">
+                  <span className="badge bg-light text-secondary border">
+                    {m.relationship} • {calculatedAge} yrs
+                  </span>
+                  {dobString && (
+                    <div className="small text-muted font-monospace">{dobString}</div>
+                  )}
+                </div>
               </div>
 
               <div className="row g-2 pt-2 border-top small mb-2">
@@ -258,23 +276,19 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                   <StatusBadge type="pathshala" value={m.pathshalaStatus} />
                 </div>
                 <div className="col-6">
-                  <span className="text-muted d-block fs-8">Interest:</span>
-                  <StatusBadge type="interest" value={m.pathshalaInterest} />
-                </div>
-                {m.pathshalaInterest === "YES" && (
-                  <div className="col-12">
-                    <span className="text-muted fs-8">Conveyance: </span>
+                  <span className="text-muted d-block fs-8">Conveyance:</span>
+                  {m.transportPreference === "PICK_AND_DROP" ? (
                     <span className="badge bg-success-subtle text-success border border-success-subtle">
-                      {m.transportPreference === "PICK_AND_DROP" ? "🚐 Want Pick & Drop Service" : "🚶 By Self"}
+                      🚐 Pick &amp; Drop
                     </span>
-                  </div>
-                )}
-                {m.pathshalaInterest === "NO" && (
-                  <div className="col-12">
-                    <span className="text-muted fs-8">Reason: </span>
-                    <span className="text-danger small">{m.noInterestReason || "None provided"}</span>
-                  </div>
-                )}
+                  ) : m.transportPreference === "BY_SELF" ? (
+                    <span className="badge bg-light text-dark border">
+                      🚶 By Self
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </div>
                 {(m.preferredDay !== "NO_PREFERENCE" || m.preferredTime !== "NO_PREFERENCE") && (
                   <div className="col-12">
                     <span className="text-muted fs-8">Schedule: </span>

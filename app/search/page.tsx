@@ -2,6 +2,8 @@ import { requireAuth, getSanghAccessFilter } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
+import { getMemberCalculatedAge } from "@/lib/validation/family";
+import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 import React from "react";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +25,12 @@ interface SearchPageProps {
     gender?: string;
     relationship?: string;
     pathshalaStatus?: string;
-    pathshalaInterest?: string;
     preferredDay?: string;
     preferredTime?: string;
     startDate?: string;
     endDate?: string;
     preset?: string;
+    interest?: string;
   };
 }
 
@@ -89,9 +91,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     if (searchParams.pathshalaStatus) {
       where.pathshalaStatus = searchParams.pathshalaStatus;
     }
-    if (searchParams.pathshalaInterest) {
-      where.pathshalaInterest = searchParams.pathshalaInterest;
-    }
 
     // Age / Age Range
     const ageMin = searchParams.ageMin ? parseInt(searchParams.ageMin) : undefined;
@@ -109,6 +108,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   }
   if (searchParams.preferredTime) {
     where.preferredTime = searchParams.preferredTime;
+  }
+
+  // Interest Filter (Vihar Seva, Pathshala, Gahuli/Rangoli, Shuddhikaran, Suguru Vaiyyavach)
+  if (searchParams.interest) {
+    where.interests = {
+      has: searchParams.interest,
+    };
   }
 
   // Date Range Filter
@@ -148,6 +154,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   if (searchParams.sanghId) exportParams.set("sanghId", searchParams.sanghId);
   if (searchParams.pathshalaStatus) exportParams.set("pathshalaStatus", searchParams.pathshalaStatus);
   if (searchParams.area) exportParams.set("area", searchParams.area);
+  if (searchParams.interest) exportParams.set("interest", searchParams.interest);
 
   return (
     <div className="container py-2 py-md-4">
@@ -237,7 +244,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 name="sanghId"
                 defaultValue={searchParams.sanghId || ""}
                 className="form-select form-select-sm"
-                disabled={user.role === "VOLUNTEER" && !!user.sanghId}
+                disabled={(user.role === "VOLUNTEER" && !!user.sanghId) || user.role === "TRUSTEE"}
               >
                 <option value="">All Sanghs</option>
                 {sanghs.map((s) => (
@@ -329,7 +336,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </select>
             </div>
 
-            <div className="col-6 col-md-2">
+            <div className="col-12 col-md-4">
               <label className="form-label small fw-semibold text-dark mb-1">Pathshala Status</label>
               <select
                 name="pathshalaStatus"
@@ -344,23 +351,26 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </select>
             </div>
 
-            <div className="col-6 col-md-2">
-              <label className="form-label small fw-semibold text-dark mb-1">Interest</label>
+            {/* Row 4: Preferences, Sorting, Interest & Action */}
+            <div className="col-12 col-md-4">
+              <label className="form-label small fw-semibold text-dark mb-1">
+                Field of Interest (रुचि क्षेत्र)
+              </label>
               <select
-                name="pathshalaInterest"
-                defaultValue={searchParams.pathshalaInterest || ""}
+                name="interest"
+                defaultValue={searchParams.interest || ""}
                 className="form-select form-select-sm"
               >
-                <option value="">All</option>
-                <option value="YES">Interested</option>
-                <option value="MAYBE">Maybe</option>
-                <option value="NO">No</option>
-                <option value="UNKNOWN">Unknown</option>
+                <option value="">All Interests (सभी रुचियाँ)</option>
+                {MEMBER_INTERESTS.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.label} ({item.hindiLabel})
+                  </option>
+                ))}
               </select>
             </div>
 
-            {/* Row 4: Preferences, Sorting & Action */}
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-2">
               <label className="form-label small fw-semibold text-dark mb-1">Preferred Day</label>
               <select
                 name="preferredDay"
@@ -374,7 +384,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </select>
             </div>
 
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-2">
               <label className="form-label small fw-semibold text-dark mb-1">Preferred Time</label>
               <select
                 name="preferredTime"
@@ -388,7 +398,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </select>
             </div>
 
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-2">
               <label className="form-label small fw-semibold text-dark mb-1">Sort By</label>
               <select
                 name="sortBy"
@@ -402,7 +412,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </select>
             </div>
 
-            <div className="col-6 col-md-3">
+            <div className="col-6 col-md-2">
               <label className="form-label small fw-semibold text-dark mb-1">Sort Direction</label>
               <select
                 name="sortOrder"
@@ -455,21 +465,25 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   <tr>
                     <th className="ps-4">Member ID</th>
                     <th>Name</th>
-                    <th>Age</th>
+                    <th>Age / DOB</th>
                     <th>Family ID</th>
                     <th>Head of Family</th>
                     <th>Sangh</th>
                     <th>Area</th>
                     <th>Mobile</th>
                     <th>Pathshala Status</th>
-                    <th>Interest</th>
                     <th>Schedule</th>
+                    <th>Interests (रुचि)</th>
                     <th className="text-end pe-4">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {members.map((m) => {
-                    const isChild = m.age < 18;
+                    const calculatedAge = getMemberCalculatedAge(m);
+                    const isChild = calculatedAge < 18;
+                    const dobString = m.dateOfBirth
+                      ? new Date(m.dateOfBirth).toISOString().split("T")[0]
+                      : null;
                     return (
                       <tr key={m.id} className={isChild ? "table-warning-subtle" : ""}>
                         <td className="ps-4">
@@ -481,7 +495,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                           {m.name}
                           {isChild && <span className="badge bg-warning text-dark ms-1">Child</span>}
                         </td>
-                        <td>{m.age}</td>
+                        <td>
+                          <span className="fw-semibold">{calculatedAge} yrs</span>
+                          {dobString && (
+                            <div className="small text-muted font-monospace">{dobString}</div>
+                          )}
+                        </td>
                         <td>
                           <Link href={`/families/${m.familyId}`} className="font-monospace text-decoration-none">
                             {m.family.familyId}
@@ -498,9 +517,24 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                           </a>
                         </td>
                         <td><StatusBadge type="pathshala" value={m.pathshalaStatus} /></td>
-                        <td><StatusBadge type="interest" value={m.pathshalaInterest} /></td>
                         <td className="small text-muted">
                           {m.preferredDay !== "NO_PREFERENCE" ? `${m.preferredDay}, ${m.preferredTime}` : "—"}
+                        </td>
+                        <td>
+                          {m.interests && m.interests.length > 0 ? (
+                            <div className="d-flex flex-wrap gap-1" style={{ maxWidth: "220px" }}>
+                              {m.interests.map((k: string) => {
+                                const opt = MEMBER_INTERESTS.find((i) => i.key === k);
+                                return (
+                                  <span key={k} className="badge bg-primary-subtle text-primary border border-primary-subtle" style={{ fontSize: "0.72rem" }}>
+                                    {opt ? opt.label : k}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-muted small">—</span>
+                          )}
                         </td>
                         <td className="text-end pe-4">
                           <Link href={`/members/${m.id}`} className="btn btn-outline-secondary btn-sm">
@@ -517,32 +551,56 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
           {/* Mobile Cards */}
           <div className="d-lg-none d-flex flex-column gap-3 mb-4">
-            {members.map((m) => (
-              <div key={m.id} className="card-clean p-3">
-                <div className="d-flex justify-content-between align-items-start mb-2">
-                  <div>
-                    <Link href={`/members/${m.id}`} className="font-monospace fw-bold text-primary fs-6 text-decoration-none">
-                      {m.memberId}
-                    </Link>
-                    <h6 className="fw-bold text-dark mb-0 mt-1">{m.name}</h6>
+            {members.map((m) => {
+              const calculatedAge = getMemberCalculatedAge(m);
+              const dobString = m.dateOfBirth
+                ? new Date(m.dateOfBirth).toISOString().split("T")[0]
+                : null;
+              return (
+                <div key={m.id} className="card-clean p-3">
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <Link href={`/members/${m.id}`} className="font-monospace fw-bold text-primary fs-6 text-decoration-none">
+                        {m.memberId}
+                      </Link>
+                      <h6 className="fw-bold text-dark mb-0 mt-1">{m.name}</h6>
+                    </div>
+                    <span className="badge-sangh font-monospace">{m.sangh.prefix}</span>
                   </div>
-                  <span className="badge-sangh font-monospace">{m.sangh.prefix}</span>
-                </div>
 
-                <div className="small text-secondary mb-2">
-                  <div>Head: {m.family.headName} • <Link href={`/families/${m.familyId}`} className="font-monospace text-decoration-none">{m.family.familyId}</Link></div>
-                  <div>Area: {m.family.area} • Mobile: <a href={`tel:${m.family.mobile}`}>{m.family.mobile}</a></div>
-                  <div>Age: {m.age} {m.age < 18 ? "(Child)" : ""} • Rel: {m.relationship}</div>
-                </div>
+                  <div className="small text-secondary mb-2">
+                    <div>Head: {m.family.headName} • <Link href={`/families/${m.familyId}`} className="font-monospace text-decoration-none">{m.family.familyId}</Link></div>
+                    <div>Area: {m.family.area} • Mobile: <a href={`tel:${m.family.mobile}`}>{m.family.mobile}</a></div>
+                    <div>
+                      Age: {calculatedAge} yrs {dobString && `(DOB: ${dobString})`} {calculatedAge < 18 ? "(Child)" : ""} • Rel: {m.relationship}
+                    </div>
+                  </div>
 
-                <div className="d-flex justify-content-between align-items-center pt-2 border-top">
-                  <StatusBadge type="pathshala" value={m.pathshalaStatus} />
-                  <Link href={`/members/${m.id}`} className="btn btn-outline-primary btn-sm">
-                    View
-                  </Link>
+                  {m.interests && m.interests.length > 0 && (
+                    <div className="mt-2 pt-2 border-top">
+                      <small className="text-muted fw-semibold d-block mb-1">Interests (रुचि):</small>
+                      <div className="d-flex flex-wrap gap-1">
+                        {m.interests.map((k: string) => {
+                          const opt = MEMBER_INTERESTS.find((i) => i.key === k);
+                          return (
+                            <span key={k} className="badge bg-primary-subtle text-primary border border-primary-subtle" style={{ fontSize: "0.72rem" }}>
+                              {opt ? opt.label : k}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="d-flex justify-content-between align-items-center pt-2 border-top">
+                    <StatusBadge type="pathshala" value={m.pathshalaStatus} />
+                    <Link href={`/members/${m.id}`} className="btn btn-outline-primary btn-sm">
+                      View
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination */}

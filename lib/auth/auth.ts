@@ -68,6 +68,8 @@ export const authOptions: NextAuthOptions = {
             sanghId: dbUser.sanghId,
             sanghName: dbUser.sangh?.name || null,
             sanghPrefix: dbUser.sangh?.prefix || null,
+            canExport: dbUser.canExport ?? false,
+            mustChangePassword: dbUser.mustChangePassword ?? false,
           } as any;
         } catch (error: any) {
           // Re-throw known errors
@@ -95,6 +97,8 @@ export const authOptions: NextAuthOptions = {
         token.sanghId = (user as any).sanghId;
         token.sanghName = (user as any).sanghName;
         token.sanghPrefix = (user as any).sanghPrefix;
+        token.canExport = (user as any).canExport ?? false;
+        token.mustChangePassword = (user as any).mustChangePassword ?? false;
       } else if (token.username) {
         // Subsequent requests: re-validate against DB to catch disabled users
         try {
@@ -110,6 +114,8 @@ export const authOptions: NextAuthOptions = {
             token.sanghId = dbUser.sanghId;
             token.sanghName = dbUser.sangh?.name || null;
             token.sanghPrefix = dbUser.sangh?.prefix || null;
+            token.canExport = dbUser.canExport ?? false;
+            token.mustChangePassword = dbUser.mustChangePassword ?? false;
           } else {
             token.status = "DISABLED";
           }
@@ -124,11 +130,13 @@ export const authOptions: NextAuthOptions = {
       if (session.user && token) {
         session.user.id = token.id as string;
         session.user.username = token.username as string;
-        session.user.role = token.role as "ADMIN" | "VOLUNTEER";
+        session.user.role = token.role as "ADMIN" | "VOLUNTEER" | "TRUSTEE";
         session.user.status = token.status as "ACTIVE" | "DISABLED";
         session.user.sanghId = token.sanghId as string | null;
         session.user.sanghName = token.sanghName as string | null;
         session.user.sanghPrefix = token.sanghPrefix as string | null;
+        session.user.canExport = !!token.canExport;
+        session.user.mustChangePassword = !!token.mustChangePassword;
       }
       return session;
     },

@@ -31,7 +31,10 @@ export default async function FamilyDetailPage({ params }: FamilyPageProps) {
   }
 
   // Check Sangh-specific authorization
-  if (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== family.sanghId) {
+  if (
+    (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== family.sanghId) ||
+    (user.role === "TRUSTEE" && (!user.sanghId || user.sanghId !== family.sanghId))
+  ) {
     return (
       <div className="container py-5 text-center">
         <div className="alert alert-danger d-inline-block p-4">
@@ -47,7 +50,7 @@ export default async function FamilyDetailPage({ params }: FamilyPageProps) {
   }
 
   const isAdmin = user.role === "ADMIN";
-  const canEdit = isAdmin || !user.sanghId || user.sanghId === family.sanghId;
+  const canEdit = isAdmin || (user.role === "VOLUNTEER" && (!user.sanghId || user.sanghId === family.sanghId));
 
   return (
     <div className="container py-2 py-md-4">

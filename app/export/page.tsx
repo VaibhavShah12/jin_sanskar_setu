@@ -1,5 +1,6 @@
-import { requireAuth } from "@/lib/auth/auth-helpers";
+import { requireAuth, getSanghAccessFilter } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
+import Link from "next/link";
 import React from "react";
 
 export const dynamic = "force-dynamic";
@@ -7,11 +8,36 @@ export const dynamic = "force-dynamic";
 export default async function ExportPage() {
   const user = await requireAuth();
 
+  if (user.role === "TRUSTEE" && !user.canExport) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="card-clean p-5 max-w-lg mx-auto shadow-sm">
+          <i className="bi bi-shield-lock text-warning display-4 d-block mb-3"></i>
+          <h4 className="fw-bold text-dark mb-2">Export Permission Restricted</h4>
+          <p className="text-muted mb-4">
+            CSV data export permissions for your Trustee account are currently disabled. Please contact your system administrator to enable export privileges for your assigned Sangh.
+          </p>
+          <Link href="/dashboard" className="btn btn-outline-secondary">
+            Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const sanghFilter = getSanghAccessFilter(user);
+
   const [totalFamilies, totalMembers, totalPotential, sanghs] = await Promise.all([
-    prisma.family.count({ where: { status: "ACTIVE" } }),
-    prisma.member.count({ where: { status: "ACTIVE" } }),
-    prisma.member.count({ where: { status: "ACTIVE", age: { lt: 18 }, pathshalaStatus: "NO" } }),
-    prisma.sangh.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.family.count({ where: { status: "ACTIVE", ...sanghFilter } }),
+    prisma.member.count({ where: { status: "ACTIVE", ...sanghFilter } }),
+    prisma.member.count({ where: { status: "ACTIVE", age: { lt: 18 }, pathshalaStatus: "NO", ...sanghFilter } }),
+    prisma.sangh.findMany({
+      where: {
+        active: true,
+        ...(user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId } : {}),
+      },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   return (
@@ -67,7 +93,7 @@ export default async function ExportPage() {
               </div>
               <h5 className="fw-bold text-dark mb-2">Pathshala Potential Report</h5>
               <p className="text-muted small mb-4">
-                Prioritized outreach report of children under 18 years old who are currently not attending Pathshala (Status: NO). Includes interest and preferred timing.
+                Prioritized outreach report of children under 18 years old who are currently not attending Pathshala (Status: NO). Includes schedule and conveyance preferences.
               </p>
             </div>
             <a
@@ -116,8 +142,12 @@ export default async function ExportPage() {
         <form method="GET" action="/api/export/csv" className="row g-3">
           <div className="col-12 col-md-4">
             <label className="form-label small fw-semibold text-dark">Sangh Filter</label>
-            <select name="sanghId" className="form-select form-select-sm">
-              <option value="">All Sanghs</option>
+            <select
+              name="sanghId"
+              className="form-select form-select-sm"
+              disabled={user.role === "TRUSTEE"}
+            >
+              {user.role !== "TRUSTEE" && <option value="">All Sanghs</option>}
               {sanghs.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.prefix})

@@ -34,6 +34,11 @@ export async function createFamilyAction(
     return { success: false, error: "Unauthorized. Please log in to register a family." };
   }
 
+  // Trustees have strictly read-only access
+  if (user.role === "TRUSTEE") {
+    return { success: false, error: "Trustees have view-only access and are not authorized to register families." };
+  }
+
   // 2. Validate Sangh permission (if volunteer restricted to specific Sangh)
   if (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== rawData.sanghId) {
     return { success: false, error: "You are only authorized to register families for your assigned Sangh." };
@@ -123,16 +128,19 @@ export async function createFamilyAction(
             sanghId: data.sanghId,
             name: data.headName.trim(),
             normalizedName: normalizeName(data.headName),
+            dateOfBirth: data.headDateOfBirth ? new Date(data.headDateOfBirth) : null,
             age: data.headAge,
             gender: data.headGender,
             relationship: "HEAD",
             pathshalaStatus: data.headPathshalaStatus,
-            pathshalaInterest: data.headPathshalaInterest,
             preferredDay: data.headPreferredDay,
             preferredTime: data.headPreferredTime,
-            preferredWeekdays: data.headPathshalaInterest === "YES" && data.headPreferredDay === "WEEKDAY" ? (data.headPreferredWeekdays || null) : null,
-            transportPreference: data.headPathshalaInterest === "YES" ? (data.headTransportPreference || null) : null,
-            noInterestReason: data.headPathshalaInterest === "NO" ? (data.headNoInterestReason || null) : null,
+            preferredWeekdays: data.headPreferredDay === "WEEKDAY" ? (data.headPreferredWeekdays || null) : null,
+            transportPreference: data.headTransportPreference || null,
+            whatsappConsent: Boolean(data.headWhatsappConsent),
+            whatsappConsentDate: data.headWhatsappConsent ? new Date() : null,
+            whatsappConsentSource: data.headWhatsappConsent ? "REGISTRATION_FORM" : null,
+            whatsappConsentUpdatedBy: user.username,
             status: "ACTIVE",
             createdBy: user.username,
             updatedBy: user.username,
@@ -158,16 +166,15 @@ export async function createFamilyAction(
               sanghId: data.sanghId,
               name: m.name.trim(),
               normalizedName: normalizeName(m.name),
+              dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth) : null,
               age: m.age,
               gender: m.gender,
               relationship: m.relationship,
               pathshalaStatus: m.pathshalaStatus,
-              pathshalaInterest: m.pathshalaInterest,
               preferredDay: m.preferredDay,
               preferredTime: m.preferredTime,
-              preferredWeekdays: m.pathshalaInterest === "YES" && m.preferredDay === "WEEKDAY" ? (m.preferredWeekdays || null) : null,
-              transportPreference: m.pathshalaInterest === "YES" ? (m.transportPreference || null) : null,
-              noInterestReason: m.pathshalaInterest === "NO" ? (m.noInterestReason || null) : null,
+              preferredWeekdays: m.preferredDay === "WEEKDAY" ? (m.preferredWeekdays || null) : null,
+              transportPreference: m.transportPreference || null,
               status: "ACTIVE",
               createdBy: user.username,
               updatedBy: user.username,

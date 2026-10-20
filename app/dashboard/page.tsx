@@ -3,11 +3,23 @@ import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import React from "react";
 import Logo from "@/components/Logo";
+import MemberAccessRequestsSection, { AccessRequestItem } from "@/components/MemberAccessRequestsSection";
+import MemberSubmissionsSection, { MemberSubmissionItem } from "@/components/MemberSubmissionsSection";
+import VolunteerQrCard from "@/components/VolunteerQrCard";
+import { getPublicMemberFormUrl, generateMemberFormQrCodeDataUrl } from "@/lib/qr/qr-helper";
+import { maskMobile } from "@/lib/validation/family";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const user = await requireAuth();
+
+  // If trustee has no sanghId assigned, deny access
+  if (user.role === "TRUSTEE" && !user.sanghId) {
+    redirect("/login?error=TRUSTEE_NO_SANGH");
+  }
+
   const sanghFilter = getSanghAccessFilter(user);
 
   // Time boundary for today's registrations
@@ -21,9 +33,13 @@ export default async function DashboardPage() {
     totalChildren,
     childrenAttending,
     childrenNotAttending,
-    childrenInterested,
     todayFamilies,
+    pendingAccessRequests,
+    approvedAccessRequests,
     sanghs,
+    rawPendingRequests,
+    rawMemberSubmissions,
+    pendingFormSubmissions,
   ] = await Promise.all([
     prisma.family.count({
       where: { status: "ACTIVE", ...sanghFilter },
@@ -40,14 +56,17 @@ export default async function DashboardPage() {
     prisma.member.count({
       where: { status: "ACTIVE", age: { lt: 18 }, pathshalaStatus: "NO", ...sanghFilter },
     }),
-    prisma.member.count({
-      where: { status: "ACTIVE", age: { lt: 18 }, pathshalaInterest: "YES", ...sanghFilter },
-    }),
     prisma.family.count({
       where: { status: "ACTIVE", createdAt: { gte: startOfToday }, ...sanghFilter },
     }),
+    prisma.memberAccessRequest.count({
+      where: { status: "PENDING", ...sanghFilter },
+    }),
+    prisma.memberAccessRequest.count({
+      where: { status: "APPROVED", ...sanghFilter },
+    }),
     prisma.sangh.findMany({
-      where: { active: true },
+      where: user.role === "TRUSTEE" ? { id: user.sanghId || undefined, active: true } : { active: true },
       orderBy: { name: "asc" },
       include: {
         _count: {
@@ -58,12 +77,89 @@ export default async function DashboardPage() {
         },
       },
     }),
+    prisma.memberAccessRequest.findMany({
+      where: { status: "PENDING", ...sanghFilter },
+      include: {
+        family: { select: { familyId: true, headName: true, area: true } },
+        sangh: { select: { name: true, prefix: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    prisma.memberFormSubmission.findMany({
+      where: { ...sanghFilter },
+      include: {
+        family: {
+          select: {
+            familyId: true,
+            headName: true,
+            address: true,
+            area: true,
+            members: { where: { status: "ACTIVE" }, select: { id: true } },
+          },
+        },
+        sangh: { select: { name: true, prefix: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+    }),
+    prisma.memberFormSubmission.count({
+      where: { status: "PENDING", ...sanghFilter },
+    }),
   ]);
+
+  // Generate public member form QR code for volunteer desk
+  const memberFormUrl = getPublicMemberFormUrl();
+  const memberFormQrDataUrl = await generateMemberFormQrCodeDataUrl(memberFormUrl);
+
+  // Transform raw pending requests for client component
+  const pendingRequests: AccessRequestItem[] = rawPendingRequests.map((r) => ({
+    id: r.id,
+    requestId: r.requestId,
+    maskedMobile: maskMobile(r.mobile),
+    familyId: r.family.familyId,
+    headName: r.family.headName,
+    area: r.family.area,
+    sanghName: r.sangh.name,
+    sanghPrefix: r.sangh.prefix,
+    status: r.status,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  // Transform raw member form submissions for client component
+  const memberSubmissions: MemberSubmissionItem[] = rawMemberSubmissions.map((s) => ({
+    id: s.id,
+    submissionNumber: s.submissionNumber,
+    familyId: s.familyId,
+    familyRefId: s.family.familyId,
+    headName: s.family.headName,
+    maskedMobile: maskMobile(s.submittedMobile),
+    currentAddress: s.family.address,
+    currentArea: s.family.area,
+    currentMemberCount: s.family.members.length,
+    sanghName: s.sangh.name,
+    sanghPrefix: s.sangh.prefix,
+    headInfoCorrect: s.headInfoCorrect,
+    addressChanged: s.addressChanged,
+    newAddress: s.newAddress,
+    newArea: s.newArea,
+    memberCount: s.memberCount,
+    membersUpToDate: s.membersUpToDate,
+    correctionNeeded: s.correctionNeeded,
+    correctionDetails: s.correctionDetails,
+    additionalNotes: s.additionalNotes,
+    status: s.status,
+    reviewedBy: s.reviewedBy,
+    reviewedAt: s.reviewedAt ? s.reviewedAt.toISOString() : null,
+    rejectionReason: s.rejectionReason,
+    appliedChanges: s.appliedChanges,
+    createdAt: s.createdAt.toISOString(),
+  }));
 
   // Aggregate children count per Sangh
   const childrenPerSangh = await prisma.member.groupBy({
     by: ["sanghId"],
-    where: { status: "ACTIVE", age: { lt: 18 } },
+    where: { status: "ACTIVE", age: { lt: 18 }, ...sanghFilter },
     _count: { id: true },
   });
 
@@ -75,59 +171,49 @@ export default async function DashboardPage() {
   // Percentage calculations
   const attendingPct = totalChildren > 0 ? Math.round((childrenAttending / totalChildren) * 100) : 0;
 
+  const isTrustee = user.role === "TRUSTEE";
+  const canRegister = user.role === "ADMIN" || user.role === "VOLUNTEER";
+
   return (
     <div className="container py-2 py-md-4">
       {/* Welcome & Quick Action Header */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
           <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 mb-1">
-            {user.role === "ADMIN" ? "Administrator Portal" : `Volunteer • ${user.sanghName || "All Sanghs"}`}
+            {user.role === "ADMIN"
+              ? "Administrator Portal"
+              : isTrustee
+              ? `Trustee • ${user.sanghName || "Assigned Sangh"}`
+              : `Volunteer • ${user.sanghName || "All Sanghs"}`}
           </span>
-          <h1 className="h3 fw-bold text-dark mb-0">Community Survey Dashboard</h1>
+          <h1 className="h3 fw-bold text-dark mb-0">
+            {isTrustee ? `${user.sanghName} Dashboard` : "Community Survey Dashboard"}
+          </h1>
           <p className="text-muted small mb-0">
             Real-time survey indicators powered by PostgreSQL single source of truth
           </p>
         </div>
         <div className="d-flex gap-2">
-          <Link href="/families/new" className="btn btn-jain-primary d-flex align-items-center gap-2 px-3 shadow-sm">
-            <i className="bi bi-person-plus-fill"></i>
-            <span>Register New Family</span>
-          </Link>
+          {canRegister && (
+            <Link href="/families/new" className="btn btn-jain-primary d-flex align-items-center gap-2 px-3 shadow-sm">
+              <i className="bi bi-person-plus-fill"></i>
+              <span>Register New Family</span>
+            </Link>
+          )}
           <Link href="/search" className="btn btn-outline-secondary d-flex align-items-center gap-2 px-3">
             <i className="bi bi-search"></i>
             <span>Search</span>
           </Link>
+          {!isTrustee && (
+            <Link href="/admin/qr-code" className="btn btn-outline-primary d-flex align-items-center gap-2 px-3">
+              <i className="bi bi-qr-code"></i>
+              <span>Portal QR</span>
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* Pathshala Potential Callout Card */}
-      {childrenNotAttending > 0 && (
-        <div className="card-clean border-warning p-3 p-md-4 mb-4 bg-amber-50" style={{ backgroundColor: "#fefdf8" }}>
-          <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div className="d-flex align-items-center gap-3">
-              <div className="rounded-circle p-3 bg-warning-subtle text-warning-emphasis fs-4">
-                <i className="bi bi-mortarboard-fill"></i>
-              </div>
-              <div>
-                <h5 className="fw-bold mb-1 text-dark">
-                  Pathshala Potential: {childrenNotAttending} Children Not Yet Attending
-                </h5>
-                <p className="text-secondary small mb-0">
-                  {childrenInterested} of these children have expressed interest in attending Pathshala classes.
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/search?ageMax=17&pathshalaStatus=NO"
-              className="btn btn-warning text-dark fw-semibold px-4 shadow-sm text-nowrap"
-            >
-              View Potential Report <i className="bi bi-arrow-right ms-1"></i>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* 7 KPI Dashboard Cards */}
+      {/* Primary KPI Dashboard Cards */}
       <div className="row g-3 mb-4">
         {/* Total Families */}
         <div className="col-6 col-lg-3">
@@ -167,7 +253,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <div className="display-6 fw-bold text-dark mb-1">{totalChildren}</div>
-            <div className="text-muted small">Under 18 years old</div>
+            <div className="text-muted small">Calculated age &lt; 18 yrs</div>
           </div>
         </div>
 
@@ -186,10 +272,11 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Pathshala Metrics Breakdown Cards */}
-      <h2 className="h5 fw-bold text-dark mb-3">Pathshala Engagement Summary (Children &lt; 18)</h2>
+      {/* Pathshala & Member Access Summary Cards */}
+      <h2 className="h5 fw-bold text-dark mb-3">Pathshala Status &amp; Member Portal Requests</h2>
       <div className="row g-3 mb-4">
-        <div className="col-12 col-md-4">
+        {/* Attending */}
+        <div className="col-6 col-md-3">
           <div className="card-clean p-3 border-success-subtle h-100">
             <div className="d-flex align-items-center gap-3">
               <div className="rounded-circle p-3 bg-success-subtle text-success fs-4">
@@ -204,7 +291,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="col-12 col-md-4">
+        {/* Not Attending */}
+        <div className="col-6 col-md-3">
           <div className="card-clean p-3 border-danger-subtle h-100">
             <div className="d-flex align-items-center gap-3">
               <div className="rounded-circle p-3 bg-danger-subtle text-danger fs-4">
@@ -213,31 +301,70 @@ export default async function DashboardPage() {
               <div>
                 <div className="text-muted small fw-semibold">Not Attending</div>
                 <div className="fs-3 fw-bold text-dark">{childrenNotAttending}</div>
-                <small className="text-danger fw-medium">Target outreach group</small>
+                <small className="text-danger fw-medium">Outreach potential</small>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="col-12 col-md-4">
+        {/* Pending Member Access */}
+        <div className="col-6 col-md-3">
+          <div className="card-clean p-3 border-warning-subtle h-100">
+            <div className="d-flex align-items-center gap-3">
+              <div className="rounded-circle p-3 bg-warning-subtle text-warning-emphasis fs-4">
+                <i className="bi bi-hourglass-split"></i>
+              </div>
+              <div>
+                <div className="text-muted small fw-semibold">Pending Requests</div>
+                <div className="fs-3 fw-bold text-warning-emphasis">{pendingAccessRequests}</div>
+                <small className="text-muted">Awaiting validation</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Approved Member Access */}
+        <div className="col-6 col-md-3">
           <div className="card-clean p-3 border-info-subtle h-100">
             <div className="d-flex align-items-center gap-3">
               <div className="rounded-circle p-3 bg-info-subtle text-info-emphasis fs-4">
-                <i className="bi bi-star-fill"></i>
+                <i className="bi bi-shield-check"></i>
               </div>
               <div>
-                <div className="text-muted small fw-semibold">Children Interested</div>
-                <div className="fs-3 fw-bold text-dark">{childrenInterested}</div>
-                <small className="text-info fw-medium">Ready for enrollment</small>
+                <div className="text-muted small fw-semibold">Approved Access</div>
+                <div className="fs-3 fw-bold text-dark">{approvedAccessRequests}</div>
+                <small className="text-info fw-medium">Active member sessions</small>
               </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Member Form Submissions (Volunteer / Admin review and validation component) */}
+      <MemberSubmissionsSection
+        initialSubmissions={memberSubmissions}
+        canManage={!isTrustee}
+      />
+
+      {/* Volunteer Desk Portal QR Card */}
+      {!isTrustee && (
+        <VolunteerQrCard
+          qrDataUrl={memberFormQrDataUrl}
+          targetUrl={memberFormUrl}
+        />
+      )}
+
+      {/* Section 6: Member Access Requests (Interactive live volunteer validation component) */}
+      <MemberAccessRequestsSection
+        initialRequests={pendingRequests}
+        canManage={!isTrustee}
+      />
+
       {/* Sangh Summary Table & Cards */}
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="h5 fw-bold text-dark mb-0">Six Sanghs Community Overview</h2>
+        <h2 className="h5 fw-bold text-dark mb-0">
+          {isTrustee ? "Assigned Sangh Overview" : "Six Sanghs Community Overview"}
+        </h2>
         <Link href="/analytics" className="text-decoration-none small fw-semibold text-primary">
           View Detailed Charts <i className="bi bi-arrow-right"></i>
         </Link>

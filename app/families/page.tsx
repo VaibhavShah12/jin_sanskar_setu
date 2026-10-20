@@ -68,10 +68,12 @@ export default async function FamiliesPage({ searchParams }: FamiliesPageProps) 
             Registered Sangh households • Total active families: {totalCount}
           </p>
         </div>
-        <Link href="/families/new" className="btn btn-jain-primary d-flex align-items-center gap-2 px-3 shadow-sm">
-          <i className="bi bi-person-plus-fill"></i>
-          <span>Add New Family</span>
-        </Link>
+        {user.role !== "TRUSTEE" && (
+          <Link href="/families/new" className="btn btn-jain-primary d-flex align-items-center gap-2 px-3 shadow-sm">
+            <i className="bi bi-person-plus-fill"></i>
+            <span>Add New Family</span>
+          </Link>
+        )}
       </div>
 
       {/* Filter Bar */}
@@ -97,7 +99,7 @@ export default async function FamiliesPage({ searchParams }: FamiliesPageProps) 
               name="sanghId"
               defaultValue={requestedSanghId || ""}
               className="form-select"
-              disabled={user.role === "VOLUNTEER" && !!user.sanghId}
+              disabled={(user.role === "VOLUNTEER" && !!user.sanghId) || user.role === "TRUSTEE"}
             >
               <option value="">All Permitted Sanghs</option>
               {sanghs.map((s) => (

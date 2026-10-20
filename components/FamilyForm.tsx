@@ -4,7 +4,11 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createFamilyAction } from "@/lib/actions/family-actions";
-import { FamilyFormValues, MemberInput } from "@/lib/validation/family";
+import {
+  FamilyFormValues,
+  MemberInput,
+  calculateAgeFromDob,
+} from "@/lib/validation/family";
 
 interface SanghOption {
   id: string;
@@ -18,27 +22,10 @@ interface FamilyFormProps {
   userUsername?: string;
 }
 
-const WEEKDAYS = [
-  { id: "Monday", label: "Monday", hindi: "सोम" },
-  { id: "Tuesday", label: "Tuesday", hindi: "मंगल" },
-  { id: "Wednesday", label: "Wednesday", hindi: "बुध" },
-  { id: "Thursday", label: "Thursday", hindi: "गुरु" },
-  { id: "Friday", label: "Friday", hindi: "शुक्र" },
-];
-
-function toggleWeekdaySelection(currentStr: string | null | undefined, day: string): string {
-  const currentList = currentStr ? currentStr.split(",").map((d) => d.trim()).filter(Boolean) : [];
-  const nextList = currentList.includes(day)
-    ? currentList.filter((d) => d !== day)
-    : [...currentList, day];
-  const order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-  return order.filter((d) => nextList.includes(d)).join(", ");
-}
-
-export default function FamilyForm({ sanghs, userSanghId, userUsername }: FamilyFormProps) {
+export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
   const router = useRouter();
 
-  // Current Step: 1 = Family Details, 2 = Members, 3 = Pathshala Info, 4 = Review, 5 = Success
+  // Current Step: 1 = Family Details, 2 = Members, 3 = Review, 4 = Success
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -54,9 +41,12 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
     memberIds: string[];
   } | null>(null);
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   // Form State
   const [formData, setFormData] = useState<FamilyFormValues>({
     headName: "",
+    headDateOfBirth: "",
     headAge: 40,
     headGender: "MALE",
     mobile: "",
@@ -64,12 +54,11 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
     area: "",
     sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
     headPathshalaStatus: "UNKNOWN",
-    headPathshalaInterest: "UNKNOWN",
     headPreferredDay: "NO_PREFERENCE",
     headPreferredTime: "NO_PREFERENCE",
     headPreferredWeekdays: "",
     headTransportPreference: "BY_SELF",
-    headNoInterestReason: "",
+    headWhatsappConsent: false,
     members: [],
   });
 
@@ -81,16 +70,15 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
         ...prev.members,
         {
           name: "",
+          dateOfBirth: "",
           age: 10,
           gender: "MALE",
           relationship: "SON",
-          pathshalaStatus: "NO",
-          pathshalaInterest: "YES",
-          preferredDay: "SUNDAY",
-          preferredTime: "MORNING",
+          pathshalaStatus: "UNKNOWN",
+          preferredDay: "NO_PREFERENCE",
+          preferredTime: "NO_PREFERENCE",
           preferredWeekdays: "",
-          transportPreference: "PICK_AND_DROP",
-          noInterestReason: "",
+          transportPreference: null,
         },
       ],
     }));
@@ -106,7 +94,23 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
   const updateMember = (index: number, field: keyof MemberInput, value: any) => {
     setFormData((prev) => {
       const updated = [...prev.members];
-      updated[index] = { ...updated[index], [field]: value };
+      const member = { ...updated[index], [field]: value };
+
+      // Automatic age calculation when DOB changes
+      if (field === "dateOfBirth") {
+        if (value && typeof value === "string" && value.trim()) {
+          try {
+            const calculated = calculateAgeFromDob(value);
+            if (calculated !== null) {
+              member.age = calculated;
+            }
+          } catch {
+            // Will be caught by validator
+          }
+        }
+      }
+
+      updated[index] = member;
       return { ...prev, members: updated };
     });
   };
@@ -116,6 +120,10 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
     setErrorMsg(null);
     if (!formData.headName.trim() || formData.headName.trim().length < 2) {
       setErrorMsg("Please enter a valid Head of Family name (minimum 2 characters).");
+      return false;
+    }
+    if (formData.headDateOfBirth && formData.headDateOfBirth > todayStr) {
+      setErrorMsg("Head of family Date of Birth cannot be in the future.");
       return false;
     }
     if (!formData.mobile.trim() || formData.mobile.replace(/[^0-9]/g, "").length < 10) {
@@ -144,6 +152,10 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       const m = formData.members[i];
       if (!m.name.trim() || m.name.trim().length < 2) {
         setErrorMsg(`Please enter a valid name for member #${i + 1}.`);
+        return false;
+      }
+      if (m.dateOfBirth && m.dateOfBirth > todayStr) {
+        setErrorMsg(`Date of Birth for member #${i + 1} (${m.name}) cannot be in the future.`);
         return false;
       }
       if (m.age === undefined || m.age < 0 || m.age > 120) {
@@ -181,9 +193,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       setCurrentStep(2);
     } else if (currentStep === 2) {
       if (!validateStep2()) return;
-      setCurrentStep(3);
-    } else if (currentStep === 3) {
-      setCurrentStep(4); // Review step
+      setCurrentStep(3); // Review step
     }
   };
 
@@ -232,6 +242,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
   const resetForm = () => {
     setFormData({
       headName: "",
+      headDateOfBirth: "",
       headAge: 40,
       headGender: "MALE",
       mobile: "",
@@ -239,12 +250,11 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       area: "",
       sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
       headPathshalaStatus: "UNKNOWN",
-      headPathshalaInterest: "UNKNOWN",
       headPreferredDay: "NO_PREFERENCE",
       headPreferredTime: "NO_PREFERENCE",
       headPreferredWeekdays: "",
       headTransportPreference: "BY_SELF",
-      headNoInterestReason: "",
+      headWhatsappConsent: false,
       members: [],
     });
     setDuplicateData(null);
@@ -257,7 +267,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
   const selectedSangh = sanghs.find((s) => s.id === formData.sanghId);
 
   // =========================================================================
-  // STEP 5: SUCCESS SCREEN (Section 28)
+  // STEP 5: SUCCESS SCREEN
   // =========================================================================
   if (currentStep === 5 && successResult) {
     return (
@@ -324,18 +334,14 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             <div className="form-step-circle">2</div>
             <span className="form-step-label">Members</span>
           </div>
-          <div className={`form-step-item ${currentStep === 3 ? "form-step-active" : currentStep > 3 ? "form-step-completed" : ""}`}>
+          <div className={`form-step-item ${currentStep === 3 ? "form-step-active" : ""}`}>
             <div className="form-step-circle">3</div>
-            <span className="form-step-label">Pathshala</span>
-          </div>
-          <div className={`form-step-item ${currentStep === 4 ? "form-step-active" : ""}`}>
-            <div className="form-step-circle">4</div>
-            <span className="form-step-label">Review</span>
+            <span className="form-step-label">Review &amp; Submit</span>
           </div>
         </div>
       </nav>
 
-      {/* Exact Duplicate Warning Banner (Section 16) */}
+      {/* Exact Duplicate Warning Banner */}
       {duplicateData && (
         <div className="alert alert-danger py-3 px-3 mb-4 shadow-sm" role="alert">
           <div className="d-flex align-items-start gap-2">
@@ -359,16 +365,8 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
         </div>
       )}
 
-      {/* General Error Message */}
-      {errorMsg && (
-        <div className="alert alert-danger py-2 px-3 small mb-4 d-flex align-items-center gap-2" role="alert">
-          <i className="bi bi-exclamation-triangle-fill"></i>
-          <span>{errorMsg}</span>
-        </div>
-      )}
-
       {/* =====================================================================
-          STEP 1: FAMILY DETAILS (Section 14)
+          STEP 1: FAMILY DETAILS
           ===================================================================== */}
       {currentStep === 1 && (
         <div className="step-container">
@@ -378,7 +376,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           </p>
 
           <div className="row g-3">
-            {/* Sangh Dropdown - Exactly the six Sanghs */}
+            {/* Sangh Dropdown */}
             <div className="col-12 col-md-6">
               <label htmlFor="family-sangh" className="form-label fw-semibold text-dark">
                 Sangh <span className="text-danger">*</span>
@@ -418,7 +416,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             </div>
 
             {/* Head of Family Name */}
-            <div className="col-12 col-md-8">
+            <div className="col-12 col-md-5">
               <label htmlFor="head-name" className="form-label fw-semibold text-dark">
                 Head of Family Name <span className="text-danger">*</span>
               </label>
@@ -433,10 +431,45 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
               />
             </div>
 
+            {/* Head Date of Birth */}
+            <div className="col-12 col-sm-6 col-md-3">
+              <label htmlFor="head-dob" className="form-label fw-semibold text-dark">
+                Date of Birth
+              </label>
+              <input
+                type="date"
+                id="head-dob"
+                max={todayStr}
+                className="form-control"
+                value={formData.headDateOfBirth || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    try {
+                      const calcAge = calculateAgeFromDob(val);
+                      if (calcAge !== null) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          headDateOfBirth: val,
+                          headAge: calcAge,
+                        }));
+                        return;
+                      }
+                    } catch {}
+                  }
+                  setFormData((prev) => ({ ...prev, headDateOfBirth: val }));
+                }}
+              />
+              <div className="form-text">Auto-calculates age from birth date.</div>
+            </div>
+
             {/* Head Age */}
-            <div className="col-6 col-md-2">
+            <div className="col-6 col-sm-3 col-md-2">
               <label htmlFor="head-age" className="form-label fw-semibold text-dark">
                 Age <span className="text-danger">*</span>
+                {formData.headDateOfBirth && (
+                  <span className="badge bg-success-subtle text-success ms-1 small">Auto</span>
+                )}
               </label>
               <input
                 type="number"
@@ -444,15 +477,26 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                 inputMode="numeric"
                 min="1"
                 max="120"
-                className="form-control"
+                className={`form-control ${formData.headDateOfBirth ? "bg-light text-muted" : ""}`}
                 value={formData.headAge}
-                onChange={(e) => setFormData({ ...formData, headAge: parseInt(e.target.value) || 0 })}
+                readOnly={Boolean(formData.headDateOfBirth)}
+                title={formData.headDateOfBirth ? "Automatically calculated from Date of Birth" : "Enter age"}
+                onChange={(e) => {
+                  if (!formData.headDateOfBirth) {
+                    setFormData({ ...formData, headAge: parseInt(e.target.value) || 0 });
+                  }
+                }}
                 required
               />
+              {formData.headDateOfBirth ? (
+                <div className="form-text text-success">Calculated from DOB</div>
+              ) : (
+                <div className="form-text">Completed years</div>
+              )}
             </div>
 
             {/* Head Gender */}
-            <div className="col-6 col-md-2">
+            <div className="col-6 col-sm-3 col-md-2">
               <label htmlFor="head-gender" className="form-label fw-semibold text-dark">
                 Gender
               </label>
@@ -506,7 +550,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       )}
 
       {/* =====================================================================
-          STEP 2: FAMILY MEMBERS (Section 14 & 15)
+          STEP 2: FAMILY MEMBERS
           ===================================================================== */}
       {currentStep === 2 && (
         <div className="step-container">
@@ -514,7 +558,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             <div>
               <h4 className="fw-bold text-dark mb-0">Section 2: Additional Family Members</h4>
               <p className="text-muted small mb-0">
-                Head ({formData.headName}, Age {formData.headAge}) is already recorded as Member #1.
+                Head ({formData.headName}, Age {formData.headAge}) is recorded as Member #1.
               </p>
             </div>
             <button
@@ -565,7 +609,8 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                     </div>
 
                     <div className="row g-2">
-                      <div className="col-12 col-sm-6 col-md-4">
+                      {/* Name */}
+                      <div className="col-12 col-sm-6 col-md-3">
                         <label className="form-label small fw-semibold text-dark mb-1">
                           Full Name <span className="text-danger">*</span>
                         </label>
@@ -579,23 +624,48 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         />
                       </div>
 
-                      <div className="col-4 col-sm-3 col-md-2">
+                      {/* Date of Birth */}
+                      <div className="col-6 col-sm-6 col-md-3">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Date of Birth
+                        </label>
+                        <input
+                          type="date"
+                          max={todayStr}
+                          className="form-control form-control-sm"
+                          value={member.dateOfBirth || ""}
+                          onChange={(e) => updateMember(idx, "dateOfBirth", e.target.value)}
+                        />
+                      </div>
+
+                      {/* Age (Auto-calculated if DOB provided) */}
+                      <div className="col-6 col-sm-4 col-md-2">
                         <label className="form-label small fw-semibold text-dark mb-1">
                           Age <span className="text-danger">*</span>
+                          {member.dateOfBirth && (
+                            <span className="badge bg-success-subtle text-success ms-1" style={{ fontSize: "0.65rem" }}>Auto</span>
+                          )}
                         </label>
                         <input
                           type="number"
                           inputMode="numeric"
                           min="0"
                           max="120"
-                          className="form-control form-control-sm"
+                          className={`form-control form-control-sm ${member.dateOfBirth ? "bg-white text-muted" : ""}`}
                           value={member.age}
-                          onChange={(e) => updateMember(idx, "age", parseInt(e.target.value) || 0)}
+                          readOnly={Boolean(member.dateOfBirth)}
+                          title={member.dateOfBirth ? "Automatically calculated from Date of Birth" : "Enter age"}
+                          onChange={(e) => {
+                            if (!member.dateOfBirth) {
+                              updateMember(idx, "age", parseInt(e.target.value) || 0);
+                            }
+                          }}
                           required
                         />
                       </div>
 
-                      <div className="col-8 col-sm-3 col-md-3">
+                      {/* Gender */}
+                      <div className="col-6 col-sm-4 col-md-2">
                         <label className="form-label small fw-semibold text-dark mb-1">Gender</label>
                         <select
                           className="form-select form-select-sm"
@@ -609,7 +679,8 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         </select>
                       </div>
 
-                      <div className="col-12 col-md-3">
+                      {/* Relationship */}
+                      <div className="col-6 col-sm-4 col-md-2">
                         <label className="form-label small fw-semibold text-dark mb-1">
                           Relationship to Head
                         </label>
@@ -649,446 +720,16 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       )}
 
       {/* =====================================================================
-          STEP 3: PATHSHALA INFORMATION (Section 15)
+          STEP 3: REVIEW BEFORE SUBMIT
           ===================================================================== */}
       {currentStep === 3 && (
-        <div className="step-container">
-          <h4 className="fw-bold text-dark mb-1">Section 3: Pathshala Information</h4>
-          <p className="text-muted small mb-4">
-            Collect Pathshala attendance and preferences. Special emphasis on children under 18 years old.
-          </p>
-
-          {/* Head Pathshala Status */}
-          <div className="card p-3 border rounded-3 mb-3 bg-white">
-            <h6 className="fw-bold text-dark mb-2">
-              Head of Family: {formData.headName} ({formData.headAge} yrs)
-            </h6>
-            <div className="row g-2">
-              <div className="col-6 col-md-3">
-                <label className="form-label small text-muted mb-1">Pathshala Status</label>
-                <select
-                  className="form-select form-select-sm"
-                  value={formData.headPathshalaStatus}
-                  onChange={(e) => setFormData({ ...formData, headPathshalaStatus: e.target.value as any })}
-                >
-                  <option value="UNKNOWN">Unknown</option>
-                  <option value="YES">Yes (Attending)</option>
-                  <option value="NO">No (Not Attending)</option>
-                  <option value="PREVIOUSLY_ATTENDED">Previously Attended</option>
-                </select>
-              </div>
-              <div className="col-6 col-md-3">
-                <label className="form-label small text-muted mb-1">Interest</label>
-                <select
-                  className="form-select form-select-sm"
-                  value={formData.headPathshalaInterest}
-                  onChange={(e) => {
-                    const val = e.target.value as any;
-                    setFormData({
-                      ...formData,
-                      headPathshalaInterest: val,
-                      headTransportPreference: val === "YES" ? (formData.headTransportPreference || "PICK_AND_DROP") : formData.headTransportPreference,
-                    });
-                  }}
-                >
-                  <option value="UNKNOWN">Unknown</option>
-                  <option value="YES">Yes</option>
-                  <option value="MAYBE">Maybe</option>
-                  <option value="NO">No</option>
-                </select>
-              </div>
-              <div className="col-6 col-md-3">
-                <label className="form-label small text-muted mb-1">Preferred Day</label>
-                <select
-                  className="form-select form-select-sm"
-                  value={formData.headPreferredDay}
-                  onChange={(e) => setFormData({ ...formData, headPreferredDay: e.target.value as any })}
-                >
-                  <option value="NO_PREFERENCE">No Preference</option>
-                  <option value="SUNDAY">Sunday</option>
-                  <option value="SATURDAY">Saturday</option>
-                  <option value="WEEKDAY">Weekday</option>
-                </select>
-              </div>
-              <div className="col-6 col-md-3">
-                <label className="form-label small text-muted mb-1">Preferred Time</label>
-                <select
-                  className="form-select form-select-sm"
-                  value={formData.headPreferredTime}
-                  onChange={(e) => setFormData({ ...formData, headPreferredTime: e.target.value as any })}
-                >
-                  <option value="NO_PREFERENCE">No Preference</option>
-                  <option value="MORNING">Morning</option>
-                  <option value="AFTERNOON">Afternoon</option>
-                  <option value="EVENING">Evening</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Conditional: Preferred Weekdays Checkboxes (if Interest is YES and Preferred Day is WEEKDAY) */}
-            {formData.headPathshalaInterest === "YES" && formData.headPreferredDay === "WEEKDAY" && (
-              <div className="mt-3 p-3 bg-light border border-primary-subtle rounded-3">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <label className="form-label small fw-semibold text-primary-emphasis mb-0">
-                    <i className="bi bi-calendar-check me-1"></i>
-                    Select Preferred Weekdays (सप्ताह के कौन से दिन पाठशाला जा सकते हैं?)
-                  </label>
-                  <div className="btn-group btn-group-sm">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm py-0 px-2"
-                      style={{ fontSize: "0.75rem" }}
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          headPreferredWeekdays: "Monday, Tuesday, Wednesday, Thursday, Friday",
-                        })
-                      }
-                    >
-                      All (Mon–Fri)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm py-0 px-2"
-                      style={{ fontSize: "0.75rem" }}
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          headPreferredWeekdays: "",
-                        })
-                      }
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-                <div className="d-flex flex-wrap gap-2 pt-1">
-                  {WEEKDAYS.map((day) => {
-                    const isChecked = (formData.headPreferredWeekdays || "")
-                      .split(",")
-                      .map((d) => d.trim())
-                      .includes(day.id);
-                    return (
-                      <label
-                        key={day.id}
-                        className={`btn btn-sm d-flex align-items-center gap-1 border ${
-                          isChecked
-                            ? "btn-primary text-white border-primary fw-semibold shadow-sm"
-                            : "btn-light text-dark border-secondary-subtle"
-                        }`}
-                        style={{ cursor: "pointer" }}
-                      >
-                        <input
-                          type="checkbox"
-                          className="form-check-input me-1 my-0"
-                          checked={isChecked}
-                          onChange={() =>
-                            setFormData({
-                              ...formData,
-                              headPreferredWeekdays: toggleWeekdaySelection(
-                                formData.headPreferredWeekdays,
-                                day.id
-                              ),
-                            })
-                          }
-                        />
-                        <span>{day.label}</span>
-                        <span className={isChecked ? "text-white-50 small ms-1" : "text-muted small ms-1"}>
-                          ({day.hindi})
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Conditional: Pick & Drop (if YES) */}
-            {formData.headPathshalaInterest === "YES" && (
-              <div className="mt-3 p-3 bg-light border border-success-subtle rounded-3">
-                <label className="form-label small fw-semibold text-success-emphasis mb-2 d-block">
-                  <i className="bi bi-bus-front me-1"></i>
-                  Conveyance Preference (पिक-एंड-ड्रॉप सेवा या स्वयं द्वारा?) <span className="text-danger">*</span>
-                </label>
-                <div className="d-flex flex-wrap gap-4">
-                  <div className="form-check">
-                    <input
-                      className="form-check-input"
-                      type="radio"
-                      name="head-transport"
-                      id="head-transport-pick"
-                      value="PICK_AND_DROP"
-                      checked={formData.headTransportPreference === "PICK_AND_DROP"}
-                      onChange={() => setFormData({ ...formData, headTransportPreference: "PICK_AND_DROP" })}
-                    />
-                    <label className="form-check-label small fw-medium text-dark" htmlFor="head-transport-pick">
-                      🚐 Want Pick &amp; Drop Service (रिक्शा / वैन सेवा चाहिए)
-                    </label>
-                  </div>
-                  <div className="form-check">
-                    <input
-                      className="form-check-input"
-                      type="radio"
-                      name="head-transport"
-                      id="head-transport-self"
-                      value="BY_SELF"
-                      checked={formData.headTransportPreference === "BY_SELF"}
-                      onChange={() => setFormData({ ...formData, headTransportPreference: "BY_SELF" })}
-                    />
-                    <label className="form-check-label small fw-medium text-dark" htmlFor="head-transport-self">
-                      🚶 By Self (स्वयं द्वारा - Parents / Self)
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Conditional: Reason Comment Box (if NO) */}
-            {formData.headPathshalaInterest === "NO" && (
-              <div className="mt-3 p-3 bg-light border border-danger-subtle rounded-3">
-                <label className="form-label small fw-semibold text-danger-emphasis mb-1 d-block">
-                  <i className="bi bi-chat-square-text me-1"></i>
-                  Reason for not attending Pathshala? (पाठशाला में रुचि न होने का कारण)
-                </label>
-                <textarea
-                  className="form-control form-control-sm bg-white"
-                  rows={2}
-                  placeholder="Enter reason e.g. Timing clash, distance, classes elsewhere, etc. (कारण दर्ज करें)"
-                  value={formData.headNoInterestReason || ""}
-                  onChange={(e) => setFormData({ ...formData, headNoInterestReason: e.target.value })}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Additional Members Pathshala Fields */}
-          {formData.members.map((member, idx) => {
-            const isChild = member.age < 18;
-            return (
-              <div
-                key={idx}
-                className={`card p-3 border rounded-3 mb-3 ${isChild ? "border-warning-subtle bg-amber-50" : "bg-white"}`}
-                style={isChild ? { backgroundColor: "#fffef9" } : {}}
-              >
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <h6 className="fw-bold text-dark mb-0">
-                    {member.name || `Member #${idx + 2}`} ({member.age} yrs, {member.relationship})
-                  </h6>
-                  {isChild && (
-                    <span className="badge bg-warning text-dark">
-                      <i className="bi bi-star-fill me-1"></i> Child Target
-                    </span>
-                  )}
-                </div>
-
-                <div className="row g-2">
-                  <div className="col-6 col-md-3">
-                    <label className="form-label small text-muted mb-1">Pathshala Status</label>
-                    <select
-                      className="form-select form-select-sm"
-                      value={member.pathshalaStatus}
-                      onChange={(e) => updateMember(idx, "pathshalaStatus", e.target.value as any)}
-                    >
-                      <option value="UNKNOWN">Unknown</option>
-                      <option value="YES">Yes (Attending)</option>
-                      <option value="NO">No (Not Attending)</option>
-                      <option value="PREVIOUSLY_ATTENDED">Previously Attended</option>
-                    </select>
-                  </div>
-                  <div className="col-6 col-md-3">
-                    <label className="form-label small text-muted mb-1">Interest</label>
-                    <select
-                      className="form-select form-select-sm"
-                      value={member.pathshalaInterest}
-                      onChange={(e) => {
-                        const val = e.target.value as any;
-                        updateMember(idx, "pathshalaInterest", val);
-                        if (val === "YES" && !member.transportPreference) {
-                          updateMember(idx, "transportPreference", "PICK_AND_DROP");
-                        }
-                      }}
-                    >
-                      <option value="UNKNOWN">Unknown</option>
-                      <option value="YES">Yes</option>
-                      <option value="MAYBE">Maybe</option>
-                      <option value="NO">No</option>
-                    </select>
-                  </div>
-                  <div className="col-6 col-md-3">
-                    <label className="form-label small text-muted mb-1">Preferred Day</label>
-                    <select
-                      className="form-select form-select-sm"
-                      value={member.preferredDay}
-                      onChange={(e) => updateMember(idx, "preferredDay", e.target.value as any)}
-                    >
-                      <option value="NO_PREFERENCE">No Preference</option>
-                      <option value="SUNDAY">Sunday</option>
-                      <option value="SATURDAY">Saturday</option>
-                      <option value="WEEKDAY">Weekday</option>
-                    </select>
-                  </div>
-                  <div className="col-6 col-md-3">
-                    <label className="form-label small text-muted mb-1">Preferred Time</label>
-                    <select
-                      className="form-select form-select-sm"
-                      value={member.preferredTime}
-                      onChange={(e) => updateMember(idx, "preferredTime", e.target.value as any)}
-                    >
-                      <option value="NO_PREFERENCE">No Preference</option>
-                      <option value="MORNING">Morning</option>
-                      <option value="AFTERNOON">Afternoon</option>
-                      <option value="EVENING">Evening</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Conditional: Preferred Weekdays Checkboxes (if Interest is YES and Preferred Day is WEEKDAY) */}
-                {member.pathshalaInterest === "YES" && member.preferredDay === "WEEKDAY" && (
-                  <div className="mt-3 p-3 bg-light border border-primary-subtle rounded-3">
-                    <div className="d-flex justify-content-between align-items-center mb-2">
-                      <label className="form-label small fw-semibold text-primary-emphasis mb-0">
-                        <i className="bi bi-calendar-check me-1"></i>
-                        Select Preferred Weekdays (सप्ताह के कौन से दिन पाठशाला जा सकते हैं?)
-                      </label>
-                      <div className="btn-group btn-group-sm">
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary btn-sm py-0 px-2"
-                          style={{ fontSize: "0.75rem" }}
-                          onClick={() =>
-                            updateMember(
-                              idx,
-                              "preferredWeekdays",
-                              "Monday, Tuesday, Wednesday, Thursday, Friday"
-                            )
-                          }
-                        >
-                          All (Mon–Fri)
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary btn-sm py-0 px-2"
-                          style={{ fontSize: "0.75rem" }}
-                          onClick={() =>
-                            updateMember(idx, "preferredWeekdays", "")
-                          }
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-                    <div className="d-flex flex-wrap gap-2 pt-1">
-                      {WEEKDAYS.map((day) => {
-                        const isChecked = (member.preferredWeekdays || "")
-                          .split(",")
-                          .map((d) => d.trim())
-                          .includes(day.id);
-                        return (
-                          <label
-                            key={day.id}
-                            className={`btn btn-sm d-flex align-items-center gap-1 border ${
-                              isChecked
-                                ? "btn-primary text-white border-primary fw-semibold shadow-sm"
-                                : "btn-light text-dark border-secondary-subtle"
-                            }`}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <input
-                              type="checkbox"
-                              className="form-check-input me-1 my-0"
-                              checked={isChecked}
-                              onChange={() =>
-                                updateMember(
-                                  idx,
-                                  "preferredWeekdays",
-                                  toggleWeekdaySelection(member.preferredWeekdays, day.id)
-                                )
-                              }
-                            />
-                            <span>{day.label}</span>
-                            <span className={isChecked ? "text-white-50 small ms-1" : "text-muted small ms-1"}>
-                              ({day.hindi})
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Conditional: Pick & Drop (if YES) */}
-                {member.pathshalaInterest === "YES" && (
-                  <div className="mt-3 p-3 bg-light border border-success-subtle rounded-3">
-                    <label className="form-label small fw-semibold text-success-emphasis mb-2 d-block">
-                      <i className="bi bi-bus-front me-1"></i>
-                      Conveyance Preference (पिक-एंड-ड्रॉप सेवा या स्वयं द्वारा?) <span className="text-danger">*</span>
-                    </label>
-                    <div className="d-flex flex-wrap gap-4">
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name={`member-${idx}-transport`}
-                          id={`member-${idx}-transport-pick`}
-                          value="PICK_AND_DROP"
-                          checked={member.transportPreference === "PICK_AND_DROP"}
-                          onChange={() => updateMember(idx, "transportPreference", "PICK_AND_DROP")}
-                        />
-                        <label className="form-check-label small fw-medium text-dark" htmlFor={`member-${idx}-transport-pick`}>
-                          🚐 Want Pick &amp; Drop Service (रिक्शा / वैन सेवा चाहिए)
-                        </label>
-                      </div>
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name={`member-${idx}-transport`}
-                          id={`member-${idx}-transport-self`}
-                          value="BY_SELF"
-                          checked={member.transportPreference === "BY_SELF"}
-                          onChange={() => updateMember(idx, "transportPreference", "BY_SELF")}
-                        />
-                        <label className="form-check-label small fw-medium text-dark" htmlFor={`member-${idx}-transport-self`}>
-                          🚶 By Self (स्वयं द्वारा - Parents / Self)
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Conditional: Reason Comment Box (if NO) */}
-                {member.pathshalaInterest === "NO" && (
-                  <div className="mt-3 p-3 bg-light border border-danger-subtle rounded-3">
-                    <label className="form-label small fw-semibold text-danger-emphasis mb-1 d-block">
-                      <i className="bi bi-chat-square-text me-1"></i>
-                      Reason for not attending Pathshala? (पाठशाला में रुचि न होने का कारण)
-                    </label>
-                    <textarea
-                      className="form-control form-control-sm bg-white"
-                      rows={2}
-                      placeholder="Enter reason e.g. Timing clash, distance, classes elsewhere, etc. (कारण दर्ज करें)"
-                      value={member.noInterestReason || ""}
-                      onChange={(e) => updateMember(idx, "noInterestReason", e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* =====================================================================
-          STEP 4: REVIEW BEFORE SUBMIT (Section 36)
-          ===================================================================== */}
-      {currentStep === 4 && (
         <div className="step-container">
           <h4 className="fw-bold text-dark mb-1">Review & Confirm Family Survey</h4>
           <p className="text-muted small mb-4">
             Please carefully review all entered family details before final submission.
           </p>
 
-          {/* Member Duplicate Warnings (if triggered by server) */}
+          {/* Member Duplicate Warnings */}
           {memberWarnings && memberWarnings.length > 0 && (
             <div className="alert alert-warning py-3 px-3 mb-4 shadow-sm" role="alert">
               <h6 className="fw-bold text-dark mb-2">
@@ -1126,6 +767,9 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
               <div className="col-6 col-md-4">
                 <span className="text-muted d-block">Head of Family:</span>
                 <strong>{formData.headName} ({formData.headAge} yrs, {formData.headGender})</strong>
+                {formData.headDateOfBirth && (
+                  <span className="text-muted d-block small">DOB: {formData.headDateOfBirth}</span>
+                )}
               </div>
               <div className="col-6 col-md-4">
                 <span className="text-muted d-block">Mobile Number:</span>
@@ -1152,85 +796,37 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                   <tr>
                     <th>#</th>
                     <th>Name</th>
-                    <th>Age</th>
+                    <th>DOB / Age</th>
+                    <th>Gender</th>
                     <th>Relationship</th>
-                    <th>Pathshala Status</th>
-                    <th>Interest</th>
-                    <th>Conveyance / Note</th>
-                    <th>Preferred Schedule</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td><strong>1</strong></td>
                     <td className="fw-bold">{formData.headName} <span className="badge bg-secondary">Head</span></td>
-                    <td>{formData.headAge}</td>
+                    <td>
+                      <span className="fw-semibold">{formData.headAge} yrs</span>
+                      {formData.headDateOfBirth && (
+                        <div className="small text-muted font-monospace">{formData.headDateOfBirth}</div>
+                      )}
+                    </td>
+                    <td>{formData.headGender}</td>
                     <td>Head</td>
-                    <td><span className="badge bg-light text-dark border">{formData.headPathshalaStatus}</span></td>
-                    <td><span className="badge bg-light text-dark border">{formData.headPathshalaInterest}</span></td>
-                    <td>
-                      {formData.headPathshalaInterest === "YES" && (
-                        <span className="badge bg-success-subtle text-success border border-success-subtle">
-                          {formData.headTransportPreference === "PICK_AND_DROP" ? "🚐 Pick & Drop" : "🚶 By Self"}
-                        </span>
-                      )}
-                      {formData.headPathshalaInterest === "NO" && (
-                        <span className="small text-danger" title={formData.headNoInterestReason || ""}>
-                          {formData.headNoInterestReason ? `Reason: ${formData.headNoInterestReason}` : "No reason provided"}
-                        </span>
-                      )}
-                      {formData.headPathshalaInterest !== "YES" && formData.headPathshalaInterest !== "NO" && "—"}
-                    </td>
-                    <td>
-                      {formData.headPreferredDay === "WEEKDAY" && formData.headPreferredWeekdays ? (
-                        <div>
-                          <div className="fw-semibold">Weekday</div>
-                          <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
-                            {formData.headPreferredWeekdays}
-                          </span>
-                          <div className="text-muted small mt-1">{formData.headPreferredTime}</div>
-                        </div>
-                      ) : (
-                        `${formData.headPreferredDay}, ${formData.headPreferredTime}`
-                      )}
-                    </td>
                   </tr>
                   {formData.members.map((m, idx) => (
                     <tr key={idx}>
                       <td>{idx + 2}</td>
                       <td className="fw-semibold">{m.name}</td>
                       <td>
-                        {m.age} {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                        <span className="fw-semibold">{m.age} yrs</span>
+                        {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                        {m.dateOfBirth && (
+                          <div className="small text-muted font-monospace">{m.dateOfBirth}</div>
+                        )}
                       </td>
+                      <td>{m.gender}</td>
                       <td>{m.relationship}</td>
-                      <td><span className="badge bg-light text-dark border">{m.pathshalaStatus}</span></td>
-                      <td><span className="badge bg-light text-dark border">{m.pathshalaInterest}</span></td>
-                      <td>
-                        {m.pathshalaInterest === "YES" && (
-                          <span className="badge bg-success-subtle text-success border border-success-subtle">
-                            {m.transportPreference === "PICK_AND_DROP" ? "🚐 Pick & Drop" : "🚶 By Self"}
-                          </span>
-                        )}
-                        {m.pathshalaInterest === "NO" && (
-                          <span className="small text-danger" title={m.noInterestReason || ""}>
-                            {m.noInterestReason ? `Reason: ${m.noInterestReason}` : "No reason provided"}
-                          </span>
-                        )}
-                        {m.pathshalaInterest !== "YES" && m.pathshalaInterest !== "NO" && "—"}
-                      </td>
-                      <td>
-                        {m.preferredDay === "WEEKDAY" && m.preferredWeekdays ? (
-                          <div>
-                            <div className="fw-semibold">Weekday</div>
-                            <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
-                              {m.preferredWeekdays}
-                            </span>
-                            <div className="text-muted small mt-1">{m.preferredTime}</div>
-                          </div>
-                        ) : (
-                          `${m.preferredDay}, ${m.preferredTime}`
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1257,7 +853,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           </Link>
         )}
 
-        {currentStep < 4 ? (
+        {currentStep < 3 ? (
           <button
             type="button"
             onClick={handleNext}
@@ -1286,6 +882,50 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           </button>
         )}
       </div>
+
+      {/* Validation Error Message Displayed Directly Below the Next / Submit Button */}
+      {errorMsg && (
+        <div
+          id="registration-error-below-next"
+          className="alert alert-danger py-2 px-3 mt-3 d-flex align-items-center justify-content-between gap-2 shadow-sm border-danger animate-fade-in"
+          role="alert"
+        >
+          <div className="d-flex align-items-center gap-2">
+            <i className="bi bi-exclamation-triangle-fill text-danger fs-5 flex-shrink-0"></i>
+            <span className="fw-semibold text-danger-emphasis">{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            className="btn-close flex-shrink-0"
+            onClick={() => setErrorMsg(null)}
+            aria-label="Dismiss error"
+          ></button>
+        </div>
+      )}
+
+      {/* Visible Floating Popup Modal/Toast for Immediate Attention */}
+      {errorMsg && (
+        <div
+          className="position-fixed bottom-0 start-50 translate-middle-x mb-4 p-3 z-3"
+          style={{ maxWidth: "90%", width: "520px" }}
+        >
+          <div className="card shadow-lg border-danger border-2 bg-white">
+            <div className="card-body py-2 px-3 d-flex align-items-center justify-content-between gap-2">
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-exclamation-circle-fill fs-4 text-danger flex-shrink-0"></i>
+                <div className="small fw-bold text-dark">{errorMsg}</div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger py-0 px-2 flex-shrink-0"
+                onClick={() => setErrorMsg(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

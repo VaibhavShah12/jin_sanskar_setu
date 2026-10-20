@@ -23,7 +23,6 @@ interface AnalyticsData {
   familiesBySangh: { name: string; prefix: string; count: number; sanghId: string }[];
   membersByAgeGroup: { group: string; count: number; min: number; max: number }[];
   childrenByPathshalaStatus: { name: string; count: number; status: string }[];
-  childrenByPathshalaInterest: { name: string; count: number; interest: string }[];
   membersByArea: { area: string; count: number }[];
   registrationsOverTime: { date: string; families: number }[];
   childrenBySangh: { name: string; prefix: string; count: number; sanghId: string }[];
@@ -178,36 +177,34 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsData }) {
         </div>
       </div>
 
-      {/* 5. Children by Pathshala Interest */}
+      {/* 5. Children by Sangh */}
       <div className="col-12 col-lg-6">
         <div className="card-clean p-3 p-md-4 h-100">
           <div className="d-flex justify-content-between align-items-center mb-3">
-            <h5 className="fw-bold text-dark mb-0">5. Children by Pathshala Interest</h5>
+            <h5 className="fw-bold text-dark mb-0">5. Children by Sangh</h5>
             <small className="text-muted">Age &lt; 18</small>
           </div>
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={data.childrenByPathshalaInterest}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={95}
+              <BarChart
+                data={data.childrenBySangh}
+                margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="prefix" angle={-15} textAnchor="end" interval={0} fontSize={12} />
+                <YAxis allowDecimals={false} fontSize={12} />
+                <Tooltip
+                  formatter={(val: number) => [`${val} Children`, "Count"]}
+                  labelFormatter={(lbl) => `Sangh: ${lbl}`}
+                />
+                <Bar
                   dataKey="count"
+                  fill="#f59e0b"
+                  radius={[4, 4, 0, 0]}
                   cursor="pointer"
-                  onClick={(entry) =>
-                    router.push(`/search?ageMax=17&pathshalaInterest=${entry.interest}`)
-                  }
-                >
-                  {data.childrenByPathshalaInterest.map((_, index) => (
-                    <Cell key={`cell-int-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(val: number) => [`${val} Children`, "Interest"]} />
-                <Legend />
-              </PieChart>
+                  onClick={(entry) => router.push(`/search?ageMax=17&sanghId=${entry.sanghId}`)}
+                />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>

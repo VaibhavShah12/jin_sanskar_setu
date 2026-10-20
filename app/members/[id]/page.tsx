@@ -5,6 +5,7 @@ import MemberDetailActions from "@/components/MemberDetailActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import React from "react";
+import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,10 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
   }
 
   // Check authorization
-  if (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== member.sanghId) {
+  if (
+    (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== member.sanghId) ||
+    (user.role === "TRUSTEE" && (!user.sanghId || user.sanghId !== member.sanghId))
+  ) {
     return (
       <div className="container py-5 text-center">
         <div className="alert alert-danger d-inline-block p-4">
@@ -46,7 +50,27 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
     );
   }
 
-  const isChild = member.age < 18;
+  const calculatedAge = member.dateOfBirth
+    ? (() => {
+        try {
+          const birthDate = new Date(member.dateOfBirth);
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getUTCFullYear();
+          const m = today.getMonth() - birthDate.getUTCMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getUTCDate())) {
+            age--;
+          }
+          return Math.max(0, age);
+        } catch {
+          return member.age;
+        }
+      })()
+    : member.age;
+
+  const isChild = calculatedAge < 18;
+  const dobFormatted = member.dateOfBirth
+    ? new Date(member.dateOfBirth).toISOString().split("T")[0]
+    : null;
 
   return (
     <div className="container py-2 py-md-4">
@@ -102,7 +126,14 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
         <div className="row g-3">
           <div className="col-6 col-md-3">
             <span className="text-muted small d-block">Age</span>
-            <strong className="fs-5 text-dark">{member.age} years</strong>
+            <strong className="fs-5 text-dark">{calculatedAge} years</strong>
+            {dobFormatted ? (
+              <span className="badge bg-light text-secondary border font-monospace mt-1 d-inline-block">
+                DOB: {dobFormatted}
+              </span>
+            ) : (
+              <span className="text-muted small d-block">DOB not recorded</span>
+            )}
           </div>
           <div className="col-6 col-md-3">
             <span className="text-muted small d-block">Gender</span>
@@ -129,24 +160,19 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
         </div>
       </div>
 
-      {/* Pathshala Profile Card (Section 15 & 20) */}
+      {/* Pathshala Profile Card */}
       <div className="card-clean p-4 mb-4 bg-white">
         <h3 className="h5 fw-bold text-dark mb-3 border-bottom pb-2">
           Pathshala &amp; Religious Education Status
         </h3>
 
         <div className="row g-3">
-          <div className="col-12 col-sm-6 col-md-3">
+          <div className="col-12 col-sm-6 col-md-4">
             <span className="text-muted small d-block mb-1">Current Attendance Status</span>
             <StatusBadge type="pathshala" value={member.pathshalaStatus} />
           </div>
 
-          <div className="col-12 col-sm-6 col-md-3">
-            <span className="text-muted small d-block mb-1">Interest in Attending</span>
-            <StatusBadge type="interest" value={member.pathshalaInterest} />
-          </div>
-
-          <div className="col-12 col-sm-6 col-md-3">
+          <div className="col-12 col-sm-6 col-md-4">
             <span className="text-muted small d-block mb-1">Preferred Day</span>
             <strong className="text-dark d-block">
               {member.preferredDay !== "NO_PREFERENCE" ? member.preferredDay : "No Specific Preference"}
@@ -158,34 +184,56 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
             )}
           </div>
 
-          <div className="col-12 col-sm-6 col-md-3">
+          <div className="col-12 col-sm-6 col-md-4">
             <span className="text-muted small d-block mb-1">Preferred Time</span>
             <strong className="text-dark">
               {member.preferredTime !== "NO_PREFERENCE" ? member.preferredTime : "No Specific Preference"}
             </strong>
           </div>
 
-          {member.pathshalaInterest === "YES" && (
-            <div className="col-12 col-md-6">
-              <span className="text-muted small d-block mb-1">Conveyance / Pick &amp; Drop (पिक-एंड-ड्रॉप)</span>
+          <div className="col-12 col-md-6">
+            <span className="text-muted small d-block mb-1">Conveyance / Pick &amp; Drop (पिक-एंड-ड्रॉप)</span>
+            {member.transportPreference === "PICK_AND_DROP" ? (
               <span className="badge bg-success-subtle text-success fs-6 fw-semibold border border-success-subtle px-2 py-1">
-                {member.transportPreference === "PICK_AND_DROP"
-                  ? "🚐 Wants Pick & Drop Service (पिक-एंड-ड्रॉप सेवा)"
-                  : "🚶 By Self / Parents Conveyance (स्वयं द्वारा)"}
+                🚐 Wants Pick &amp; Drop Service (पिक-एंड-ड्रॉप सेवा)
               </span>
-            </div>
-          )}
-
-          {member.pathshalaInterest === "NO" && (
-            <div className="col-12 col-md-8">
-              <span className="text-muted small d-block mb-1">Reason for Not Attending (कारण)</span>
-              <div className="p-2 bg-light border border-danger-subtle rounded-2 text-danger small">
-                <i className="bi bi-info-circle me-1"></i>
-                {member.noInterestReason ? member.noInterestReason : "No specific reason recorded."}
-              </div>
-            </div>
-          )}
+            ) : member.transportPreference === "BY_SELF" ? (
+              <span className="badge bg-light text-dark fs-6 border px-2 py-1">
+                🚶 By Self / Parents Conveyance (स्वयं द्वारा)
+              </span>
+            ) : (
+              <span className="text-muted small">No conveyance preference specified</span>
+            )}
+          </div>
         </div>
+      </div>
+
+      {/* Interests Card */}
+      <div className="card-clean p-4 mb-4 bg-white">
+        <h3 className="h5 fw-bold text-dark mb-3 border-bottom pb-2">
+          Interests &amp; Seva Activities (आपकी रुचि)
+        </h3>
+
+        {member.interests && member.interests.length > 0 ? (
+          <div className="d-flex flex-wrap gap-2">
+            {member.interests.map((interestKey: string) => {
+              const opt = MEMBER_INTERESTS.find((i) => i.key === interestKey);
+              return (
+                <span
+                  key={interestKey}
+                  className="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6 rounded-pill"
+                >
+                  <i className="bi bi-star-fill text-warning me-1"></i>
+                  {opt ? `${opt.label} (${opt.hindiLabel})` : interestKey}
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-muted small mb-0">
+            No specific interest areas recorded yet. These can be selected via the Member Verification &amp; Interest Portal.
+          </p>
+        )}
       </div>
 
       {/* Google Sheet Sync Info */}

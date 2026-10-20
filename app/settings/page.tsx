@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
+import ChangePasswordForm from "@/components/ChangePasswordForm";
 import React from "react";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,11 @@ export default async function SettingsPage() {
               </table>
             </div>
           </div>
+        </div>
+
+        {/* Change Password Section */}
+        <div className="col-12 col-lg-8">
+          <ChangePasswordForm />
         </div>
 
         {/* The Six Seeded Sanghs (Section 5) */}

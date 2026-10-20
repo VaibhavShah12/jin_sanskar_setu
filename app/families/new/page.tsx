@@ -1,12 +1,17 @@
 import { requireAuth } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
 import FamilyForm from "@/components/FamilyForm";
+import { redirect } from "next/navigation";
 import React from "react";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewFamilyPage() {
   const user = await requireAuth();
+
+  if (user.role === "TRUSTEE") {
+    redirect("/dashboard");
+  }
 
   // Load the six active Sanghs
   const sanghs = await prisma.sangh.findMany({
@@ -20,7 +25,7 @@ export default async function NewFamilyPage() {
       <div className="mb-4">
         <h1 className="h3 fw-bold text-dark mb-1">New Family Survey Registration</h1>
         <p className="text-muted small mb-0">
-          Enter verified Sangh household and Pathshala information. All records are saved directly to PostgreSQL.
+          Enter verified Sangh household information. All records are saved directly to PostgreSQL.
         </p>
       </div>
 

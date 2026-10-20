@@ -19,6 +19,7 @@ datasource db {
 enum Role {
   ADMIN
   VOLUNTEER
+  TRUSTEE
 }
 
 enum UserStatus {
@@ -87,26 +88,50 @@ enum SyncStatus {
   FAILED
 }
 
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum BirthdayMessageStatus {
+  SCHEDULED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ------------------------------------------------------------------------------
 // USERS
 // Only pre-authorized users added by an administrator may access the application.
 // ------------------------------------------------------------------------------
 
 model User {
-  id           String      @id @default(cuid())
-  username     String      @unique // Unique login username
-  passwordHash String      // bcrypt hashed password
-  name         String?
-  email        String?     @unique // Optional contact email
-  image        String?
-  role         Role        @default(VOLUNTEER)
-  status       UserStatus  @default(ACTIVE)
-  sanghId      String?
-  sangh        Sangh?      @relation(fields: [sanghId], references: [id], onDelete: SetNull)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  lastLoginAt  DateTime?
-  createdBy    String?
+  id                 String      @id @default(cuid())
+  username           String      @unique // Unique login username
+  passwordHash       String      // bcrypt hashed password
+  name               String?
+  email              String?     @unique // Optional contact email
+  image              String?
+  role               Role        @default(VOLUNTEER)
+  status             UserStatus  @default(ACTIVE)
+  sanghId            String?
+  sangh              Sangh?      @relation(fields: [sanghId], references: [id], onDelete: SetNull)
+  canExport          Boolean     @default(false)
+  mustChangePassword Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  lastLoginAt        DateTime?
+  createdBy          String?
 
   @@index([username])
   @@index([status])
@@ -127,10 +152,13 @@ model Sangh {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  users     User[]
-  families  Family[]
-  members   Member[]
-  idCounter IdCounter?
+  users          User[]
+  families       Family[]
+  members        Member[]
+  idCounter      IdCounter?
+  accessRequests MemberAccessRequest[]
+  birthdayMessages BirthdayMessageLog[]
+  memberFormSubmissions MemberFormSubmission[]
 
   @@index([prefix])
   @@map("sanghs")
@@ -158,7 +186,11 @@ model Family {
   createdBy        String?
   updatedBy        String?
 
-  members          Member[]
+  members                Member[]
+  accessRequests         MemberAccessRequest[]
+  questionnaireResponses QuestionnaireResponse[]
+  birthdayMessages       BirthdayMessageLog[]
+  memberFormSubmissions  MemberFormSubmission[]
 
   @@index([familyId])
   @@index([normalizedMobile])
@@ -183,6 +215,7 @@ model Member {
   sangh             Sangh             @relation(fields: [sanghId], references: [id], onDelete: Restrict)
   name              String
   normalizedName    String
+  dateOfBirth       DateTime?         @db.Date
   age               Int
   gender            Gender
   relationship      Relationship
@@ -194,12 +227,19 @@ model Member {
   transportPreference String?         // PICK_AND_DROP, BY_SELF
   noInterestReason    String?         // Comment/reason if pathshalaInterest is NO
   status            RecordStatus      @default(ACTIVE)
+  interests         String[]          @default([])
+  whatsappConsent          Boolean    @default(false)
+  whatsappConsentDate      DateTime?
+  whatsappConsentSource    String?    // e.g. "SURVEY_FORM", "VOLUNTEER_VERIFIED", "MEMBER_PORTAL", "ADMIN_UPDATE", "TRUSTEE_UPDATE"
+  whatsappConsentUpdatedBy String?    // Username of staff who updated consent
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   createdBy         String?
   updatedBy         String?
 
-  sheetSync         GoogleSheetSync?
+  sheetSync              GoogleSheetSync?
+  questionnaireResponses QuestionnaireResponse[]
+  birthdayMessages       BirthdayMessageLog[]
 
   @@index([memberId])
   @@index([familyId])
@@ -214,6 +254,7 @@ model Member {
   @@index([sanghId, age])
   @@index([sanghId, pathshalaStatus])
   @@index([familyId, normalizedName])
+  @@index([whatsappConsent])
   @@map("members")
 }
 
@@ -290,3 +331,208 @@ model GoogleSheetSync {
   @@index([memberId])
   @@map("google_sheet_sync")
 }
+
+// ------------------------------------------------------------------------------
+// MEMBER ACCESS REQUESTS
+// Tracks self-service access requests submitted by family members via mobile.
+// Concurrency-safe: only one volunteer can transition a request to APPROVED.
+// ------------------------------------------------------------------------------
+
+model MemberAccessRequest {
+  id               String              @id @default(cuid())
+  requestId        String              @unique @default(cuid())
+  mobile           String
+  normalizedMobile String
+  familyId         String
+  family           Family              @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  sanghId          String
+  sangh            Sangh               @relation(fields: [sanghId], references: [id], onDelete: Restrict)
+  status           AccessRequestStatus @default(PENDING)
+  requestToken     String              @unique // Secret token given to requester browser session
+  grantToken       String?             @unique // Secret token issued upon volunteer approval
+  grantExpiresAt   DateTime?
+  approvedBy       String?             // Volunteer/Admin username who approved
+  approvedAt       DateTime?
+  rejectedBy       String?             // Volunteer/Admin username who rejected
+  rejectedAt       DateTime?
+  rejectionReason  String?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([status])
+  @@index([normalizedMobile])
+  @@index([familyId])
+  @@index([sanghId])
+  @@index([requestToken])
+  @@index([grantToken])
+  @@map("member_access_requests")
+}
+
+// ------------------------------------------------------------------------------
+// QUESTIONNAIRE FRAMEWORK (Extensible schema for future questionnaire rollout)
+// Kept separate from original volunteer registration records.
+// ------------------------------------------------------------------------------
+
+model Questionnaire {
+  id          String                  @id @default(cuid())
+  code        String                  @unique // e.g., "SANSKAR_SURVEY_V1"
+  title       String
+  description String?
+  version     Int                     @default(1)
+  active      Boolean                 @default(false) // Inactive until questions are supplied
+  schema      Json?                   // Extensible question definitions
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  responses   QuestionnaireResponse[]
+
+  @@index([code])
+  @@index([active])
+  @@map("questionnaires")
+}
+
+model QuestionnaireResponse {
+  id              String        @id @default(cuid())
+  questionnaireId String
+  questionnaire   Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  familyId        String
+  family          Family        @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  memberId        String?
+  member          Member?       @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  response        Json          // Stored questionnaire answers
+  submittedBy     String?       // Requester/Member identifier
+  submittedAt     DateTime      @default(now())
+
+  @@index([questionnaireId])
+  @@index([familyId])
+  @@index([memberId])
+  @@map("questionnaire_responses")
+}
+
+// ------------------------------------------------------------------------------
+// WHATSAPP BIRTHDAY MESSAGING LOGS
+// Tracks automated birthday message deliveries to family heads.
+// Concurrency-safe: Unique constraint on [memberId, birthdayYear] prevents duplicate sends.
+// ------------------------------------------------------------------------------
+
+model BirthdayMessageLog {
+  id                 String                @id @default(cuid())
+  memberId           String
+  member             Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  familyId           String
+  family             Family                @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  sanghId            String
+  sangh              Sangh                 @relation(fields: [sanghId], references: [id], onDelete: Restrict)
+  birthdayYear       Int                   // e.g. 2026
+  scheduledDate      DateTime              @db.Date
+  recipientName      String
+  recipientPhone     String                // Normalized E.164: e.g. +919822012345
+  templateName       String
+  templateLanguage   String
+  status             BirthdayMessageStatus @default(SCHEDULED)
+  whatsappMessageId  String?               @unique // Meta message ID: wamid.HBg...
+  attemptCount       Int                   @default(0)
+  lastAttemptAt      DateTime?
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  readAt             DateTime?
+  failedAt           DateTime?
+  failureReason      String?
+  skipReason         String?
+  responsePayload    Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([memberId, birthdayYear])
+  @@index([status])
+  @@index([sanghId])
+  @@index([scheduledDate])
+  @@index([birthdayYear])
+  @@index([whatsappMessageId])
+  @@map("birthday_message_logs")
+}
+
+// ------------------------------------------------------------------------------
+// PUBLIC MEMBER FORM SUBMISSIONS
+// Stored as separate pending submission records for volunteer validation.
+// Directly overwriting verified family records is prevented.
+// ------------------------------------------------------------------------------
+
+model MemberFormSubmission {
+  id                 String           @id @default(cuid())
+  submissionNumber   String           @unique // e.g. SUB-2026-0001
+  familyId           String
+  family             Family           @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  headMemberId       String?
+  sanghId            String
+  sangh              Sangh            @relation(fields: [sanghId], references: [id], onDelete: Restrict)
+  submittedMobile    String           // Normalized mobile number
+  submittedHeadName  String
+
+  // 7 specific questions for the family head
+  headInfoCorrect    Boolean          @default(true) // Q1
+  addressChanged     Boolean          @default(false) // Q2
+  newAddress         String?
+  newArea            String?
+  memberCount        Int              // Q3
+  membersUpToDate    Boolean          @default(true) // Q4
+  correctionNeeded   Boolean          @default(false) // Q5
+  correctionDetails  String?          // Q6
+  additionalNotes    String?          // Q7
+
+  status             SubmissionStatus @default(PENDING)
+  reviewedBy         String?          // Reviewer username (volunteer / admin)
+  reviewedAt         DateTime?
+  rejectionReason    String?
+  appliedChanges     Json?            // Audit snapshot of applied changes
+
+  ipAddress          String?
+  userAgent          String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([status])
+  @@index([submittedMobile])
+  @@index([familyId])
+  @@index([sanghId])
+  @@index([createdAt])
+  @@map("member_form_submissions")
+}
+
+// ------------------------------------------------------------------------------
+// OTP VERIFICATIONS
+// Rate-limited, expiring OTP store for public member verification
+// ------------------------------------------------------------------------------
+
+model OtpVerification {
+  id           String   @id @default(cuid())
+  mobile       String   // Normalized mobile (10 digits)
+  codeHash     String   // Hashed 6-digit OTP
+  sessionToken String   @unique // Cryptographic random token for verified form session
+  familyId     String?  // Matched family ID
+  attempts     Int      @default(0)
+  verified     Boolean  @default(false)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([mobile])
+  @@index([sessionToken])
+  @@map("otp_verifications")
+}
+
+// ------------------------------------------------------------------------------
+// SUBMISSION COUNTER
+// Concurrency-safe atomic sequence for public member form submissions (SUB-YYYY-XXXX)
+// ------------------------------------------------------------------------------
+
+model SubmissionCounter {
+  id         String   @id @default("GLOBAL_SUBMISSION_COUNTER")
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@map("submission_counters")
+}
+
+

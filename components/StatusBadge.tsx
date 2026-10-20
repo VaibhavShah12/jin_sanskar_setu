@@ -1,7 +1,7 @@
 import React from "react";
 
 interface StatusBadgeProps {
-  type: "pathshala" | "interest" | "role" | "status" | "gender" | "sync";
+  type: "pathshala" | "role" | "status" | "gender" | "sync" | "submission";
   value: string;
 }
 
@@ -19,24 +19,36 @@ export default function StatusBadge({ type, value }: StatusBadgeProps) {
     }
   }
 
-  if (type === "interest") {
+  if (type === "submission") {
     switch (value) {
-      case "YES":
-        return <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Interested</span>;
-      case "MAYBE":
-        return <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1">Maybe</span>;
-      case "NO":
-        return <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1">Not Interested</span>;
+      case "APPROVED":
+        return <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i className="bi bi-check-circle-fill me-1"></i>Approved</span>;
+      case "REJECTED":
+        return <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1"><i className="bi bi-x-circle-fill me-1"></i>Rejected</span>;
       default:
-        return <span className="badge bg-light text-muted border px-2 py-1">Unknown</span>;
+        return <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1"><i className="bi bi-hourglass-split me-1"></i>Pending Review</span>;
     }
   }
 
   if (type === "role") {
-    return value === "ADMIN" ? (
-      <span className="badge bg-purple-subtle text-primary border border-primary-subtle px-2 py-1 font-monospace">ADMIN</span>
-    ) : (
-      <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 font-monospace">VOLUNTEER</span>
+    if (value === "ADMIN") {
+      return (
+        <span className="badge bg-purple-subtle text-primary border border-primary-subtle px-2 py-1 font-monospace">
+          ADMIN
+        </span>
+      );
+    }
+    if (value === "TRUSTEE") {
+      return (
+        <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 font-monospace">
+          TRUSTEE
+        </span>
+      );
+    }
+    return (
+      <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 font-monospace">
+        VOLUNTEER
+      </span>
     );
   }
 

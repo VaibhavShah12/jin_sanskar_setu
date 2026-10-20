@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { prisma } from "@/lib/db/prisma";
 import { logAuditEvent } from "@/lib/audit/logger";
+import { getMemberCalculatedAge } from "@/lib/validation/family";
 
 const SHEET_HEADERS = [
   "Member ID",
@@ -8,6 +9,7 @@ const SHEET_HEADERS = [
   "Sangh",
   "Name",
   "Age",
+  "Date of Birth",
   "Gender",
   "Relationship",
   "Head of Family",
@@ -15,9 +17,7 @@ const SHEET_HEADERS = [
   "Address",
   "Area",
   "Pathshala Status",
-  "Pathshala Interest",
   "Transport Preference",
-  "No Interest Reason",
   "Preferred Day",
   "Preferred Weekdays",
   "Preferred Time",
@@ -59,14 +59,14 @@ async function ensureHeaders(sheets: any, spreadsheetId: string) {
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "Sheet1!A1:T1",
+      range: "Sheet1!A1:S1",
     });
 
     const rows = res.data.values;
     if (!rows || rows.length === 0 || rows[0].length === 0) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: "Sheet1!A1:T1",
+        range: "Sheet1!A1:S1",
         valueInputOption: "USER_ENTERED",
         requestBody: {
           values: [SHEET_HEADERS],
@@ -82,12 +82,18 @@ async function ensureHeaders(sheets: any, spreadsheetId: string) {
  * Formats a member and their family data into the row schema
  */
 function formatMemberRow(member: any): string[] {
+  const calculatedAge = getMemberCalculatedAge(member);
+  const dobStr = member.dateOfBirth
+    ? new Date(member.dateOfBirth).toISOString().split("T")[0]
+    : "";
+
   return [
     member.memberId,
     member.family.familyId,
     member.sangh.name,
     member.name,
-    String(member.age),
+    String(calculatedAge),
+    dobStr,
     member.gender,
     member.relationship,
     member.family.headName,
@@ -95,9 +101,7 @@ function formatMemberRow(member: any): string[] {
     member.family.address,
     member.family.area,
     member.pathshalaStatus,
-    member.pathshalaInterest,
     member.transportPreference || "",
-    member.noInterestReason || "",
     member.preferredDay,
     member.preferredWeekdays || "",
     member.preferredTime,
