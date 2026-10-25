@@ -38,6 +38,10 @@ export const authOptions: NextAuthOptions = {
             throw new Error("INVALID_CREDENTIALS");
           }
 
+          if (dbUser.status === "PENDING") {
+            throw new Error("ACCOUNT_PENDING_APPROVAL");
+          }
+
           if (dbUser.status !== "ACTIVE") {
             throw new Error("ACCOUNT_DISABLED");
           }
@@ -75,6 +79,7 @@ export const authOptions: NextAuthOptions = {
           // Re-throw known errors
           if (
             error.message === "INVALID_CREDENTIALS" ||
+            error.message === "ACCOUNT_PENDING_APPROVAL" ||
             error.message === "ACCOUNT_DISABLED" ||
             error.message === "USERNAME_REQUIRED"
           ) {

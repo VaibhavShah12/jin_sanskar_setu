@@ -1,7 +1,6 @@
 import { requireAuth, getSanghAccessFilter } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
-import StatusBadge from "@/components/StatusBadge";
 import { getMemberCalculatedAge } from "@/lib/validation/family";
 import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 import React from "react";
@@ -143,7 +142,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       take: pageSize,
     }),
     prisma.member.count({ where }),
-    prisma.sangh.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.sangh.findMany({
+      where: user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId, active: true } : { active: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -471,9 +473,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     <th>Sangh</th>
                     <th>Area</th>
                     <th>Mobile</th>
-                    <th>Pathshala Status</th>
-                    <th>Schedule</th>
-                    <th>Interests (रुचि)</th>
+                    <th>Field of Interests</th>
                     <th className="text-end pe-4">Action</th>
                   </tr>
                 </thead>
@@ -515,10 +515,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                           <a href={`tel:${m.family.mobile}`} className="text-decoration-none text-secondary">
                             {m.family.mobile}
                           </a>
-                        </td>
-                        <td><StatusBadge type="pathshala" value={m.pathshalaStatus} /></td>
-                        <td className="small text-muted">
-                          {m.preferredDay !== "NO_PREFERENCE" ? `${m.preferredDay}, ${m.preferredTime}` : "—"}
                         </td>
                         <td>
                           {m.interests && m.interests.length > 0 ? (
@@ -592,8 +588,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     </div>
                   )}
 
-                  <div className="d-flex justify-content-between align-items-center pt-2 border-top">
-                    <StatusBadge type="pathshala" value={m.pathshalaStatus} />
+                  <div className="d-flex justify-content-end align-items-center pt-2 border-top">
                     <Link href={`/members/${m.id}`} className="btn btn-outline-primary btn-sm">
                       View
                     </Link>

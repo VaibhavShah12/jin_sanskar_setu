@@ -175,6 +175,7 @@ export async function createFamilyAction(
               preferredTime: m.preferredTime,
               preferredWeekdays: m.preferredDay === "WEEKDAY" ? (m.preferredWeekdays || null) : null,
               transportPreference: m.transportPreference || null,
+              whatsappNumber: m.whatsappNumber ? normalizeMobile(m.whatsappNumber) : null,
               status: "ACTIVE",
               createdBy: user.username,
               updatedBy: user.username,

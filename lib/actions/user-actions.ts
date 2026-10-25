@@ -344,3 +344,252 @@ export async function updateUserRoleAndSanghAction(
     return { success: false, error: err?.message || "Failed to update user details." };
   }
 }
+
+// --------------------------------------------------------------------------
+// REGISTER TRUSTEE (PUBLIC SELF-SERVICE REGISTRATION - REQUIRES ADMIN VERIFICATION)
+// --------------------------------------------------------------------------
+export interface RegisterTrusteeInput {
+  name: string;
+  username: string;
+  password: string;
+  confirmPassword: string;
+  sanghId: string;
+  email?: string;
+  phone?: string;
+}
+
+export async function registerTrusteeAction(input: RegisterTrusteeInput) {
+  const name = input.name?.trim();
+  const username = input.username?.trim().toLowerCase();
+  const email = input.email?.trim().toLowerCase() || null;
+  const phone = input.phone?.trim() || null;
+  const sanghId = input.sanghId?.trim();
+
+  if (!name || name.length < 2) {
+    return { success: false, error: "Please enter your full name (minimum 2 characters)." };
+  }
+
+  if (!username || username.length < 3) {
+    return { success: false, error: "Username must be at least 3 characters." };
+  }
+
+  if (!/^[a-z0-9_]+$/.test(username)) {
+    return { success: false, error: "Username can only contain lowercase letters, numbers, and underscores." };
+  }
+
+  if (!sanghId) {
+    return { success: false, error: "Please select your Sangh." };
+  }
+
+  const sangh = await prisma.sangh.findUnique({
+    where: { id: sanghId },
+  });
+  if (!sangh || !sangh.active) {
+    return { success: false, error: "Invalid Sangh selected." };
+  }
+
+  if (!input.password || !input.confirmPassword) {
+    return { success: false, error: "Password and password confirmation are required." };
+  }
+
+  if (input.password !== input.confirmPassword) {
+    return { success: false, error: "Passwords do not match." };
+  }
+
+  const strengthCheck = validatePasswordStrength(input.password);
+  if (!strengthCheck.valid) {
+    return { success: false, error: strengthCheck.error };
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { username },
+  });
+  if (existingUser) {
+    return { success: false, error: "This username is already taken. Please choose another username." };
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(input.password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        username,
+        passwordHash,
+        name,
+        email,
+        phone,
+        role: Role.TRUSTEE,
+        status: UserStatus.PENDING,
+        sanghId,
+        canExport: false,
+        mustChangePassword: false,
+      },
+      include: { sangh: true },
+    });
+
+    await logAuditEvent({
+      action: "TRUSTEE_REGISTRATION_SUBMITTED",
+      entityType: "User",
+      entityId: user.id,
+      performedBy: username,
+      metadata: {
+        username,
+        name,
+        sanghName: sangh.name,
+        sanghPrefix: sangh.prefix,
+        phone,
+        email,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Your registration request for ${sangh.name} (${sangh.prefix}) has been submitted to the Administrator for verification. You will be able to log in once your request is approved.`,
+    };
+  } catch (err: any) {
+    console.error("[TRUSTEE REGISTRATION ERROR]:", err);
+    return { success: false, error: err?.message || "Failed to submit trustee registration request." };
+  }
+}
+
+// --------------------------------------------------------------------------
+// APPROVE TRUSTEE REGISTRATION (ADMIN ONLY)
+// --------------------------------------------------------------------------
+export async function approveTrusteeAction(userId: string, canExport: boolean = false) {
+  const admin = await requireAdmin();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sangh: true },
+  });
+
+  if (!user) {
+    return { success: false, error: "User not found." };
+  }
+
+  if (user.role !== Role.TRUSTEE) {
+    return { success: false, error: "Only Trustee accounts can be verified through this action." };
+  }
+
+  if (!user.sanghId) {
+    return { success: false, error: "Trustee must have an assigned Sangh before approval." };
+  }
+
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: UserStatus.ACTIVE,
+        canExport,
+        createdBy: admin.username,
+      },
+      include: { sangh: true },
+    });
+
+    await logAuditEvent({
+      action: "TRUSTEE_REGISTRATION_APPROVED",
+      entityType: "User",
+      entityId: user.id,
+      performedBy: admin.username,
+      metadata: {
+        username: user.username,
+        name: user.name,
+        sanghName: user.sangh?.name,
+        sanghPrefix: user.sangh?.prefix,
+        canExport,
+      },
+    });
+
+    return {
+      success: true,
+      user: {
+        id: updated.id,
+        username: updated.username,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+        role: updated.role,
+        status: updated.status,
+        sanghId: updated.sanghId,
+        sangh: updated.sangh,
+        canExport: updated.canExport,
+        mustChangePassword: updated.mustChangePassword,
+        createdAt: updated.createdAt,
+      },
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to approve trustee registration." };
+  }
+}
+
+// --------------------------------------------------------------------------
+// REJECT TRUSTEE REGISTRATION (ADMIN ONLY)
+// --------------------------------------------------------------------------
+export async function rejectTrusteeAction(userId: string, reason?: string) {
+  const admin = await requireAdmin();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sangh: true },
+  });
+
+  if (!user) {
+    return { success: false, error: "User not found." };
+  }
+
+  try {
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+
+    await logAuditEvent({
+      action: "TRUSTEE_REGISTRATION_REJECTED",
+      entityType: "User",
+      entityId: userId,
+      performedBy: admin.username,
+      metadata: {
+        username: user.username,
+        name: user.name,
+        sanghName: user.sangh?.name,
+        reason: reason || "Rejected by administrator",
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to reject trustee registration." };
+  }
+}
+
+// --------------------------------------------------------------------------
+// GET PENDING TRUSTEES (ADMIN ONLY)
+// --------------------------------------------------------------------------
+export async function getPendingTrusteesAction() {
+  await requireAdmin();
+  try {
+    const trustees = await prisma.user.findMany({
+      where: { role: Role.TRUSTEE, status: UserStatus.PENDING },
+      include: { sangh: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return {
+      success: true,
+      trustees: trustees.map((t) => ({
+        id: t.id,
+        username: t.username,
+        name: t.name,
+        email: t.email,
+        phone: t.phone,
+        role: t.role,
+        status: t.status,
+        sanghId: t.sanghId,
+        sanghName: t.sangh?.name || "Assigned Sangh",
+        sanghPrefix: t.sangh?.prefix || "",
+        createdAt: t.createdAt.toISOString(),
+      })),
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to fetch pending trustees." };
+  }
+}

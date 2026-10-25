@@ -1,8 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/birthday-messages",
-      "schedule": "30 3 * * *"
-    }
-  ]
+  "crons": []
 }

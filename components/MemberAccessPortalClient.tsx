@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Logo from "@/components/Logo";
-import StatusBadge from "@/components/StatusBadge";
+import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 import {
   requestMemberAccessAction,
   checkMemberAccessStatusAction,
@@ -366,7 +366,7 @@ export default function MemberAccessPortalClient() {
                       <th>Date of Birth</th>
                       <th>Age</th>
                       <th>Gender</th>
-                      <th>Pathshala</th>
+                      <th>Field of Interests</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -391,7 +391,25 @@ export default function MemberAccessPortalClient() {
                         </td>
                         <td className="text-capitalize">{m.gender.toLowerCase().replace(/_/g, " ")}</td>
                         <td>
-                          <StatusBadge type="pathshala" value={m.pathshalaStatus} />
+                          {m.interests && m.interests.length > 0 ? (
+                            <div className="d-flex flex-wrap gap-1" style={{ maxWidth: "240px" }}>
+                              {m.interests.map((interestKey: string) => {
+                                const opt = MEMBER_INTERESTS.find((i) => i.key === interestKey);
+                                return (
+                                  <span
+                                    key={interestKey}
+                                    className="badge bg-primary-subtle text-primary border border-primary-subtle"
+                                    style={{ fontSize: "0.72rem" }}
+                                    title={opt ? opt.hindiLabel : interestKey}
+                                  >
+                                    {opt ? opt.label : interestKey}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-muted small">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -413,8 +431,28 @@ export default function MemberAccessPortalClient() {
                           {m.memberId}
                         </span>
                       </div>
-                      <StatusBadge type="pathshala" value={m.pathshalaStatus} />
                     </div>
+                    {m.interests && m.interests.length > 0 && (
+                      <div className="mb-2">
+                        <small className="text-muted fw-semibold d-block mb-1" style={{ fontSize: "0.75rem" }}>
+                          Field of Interests (रुचि):
+                        </small>
+                        <div className="d-flex flex-wrap gap-1">
+                          {m.interests.map((k: string) => {
+                            const opt = MEMBER_INTERESTS.find((i) => i.key === k);
+                            return (
+                              <span
+                                key={k}
+                                className="badge bg-primary-subtle text-primary border border-primary-subtle"
+                                style={{ fontSize: "0.72rem" }}
+                              >
+                                {opt ? opt.label : k}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <div className="d-flex justify-content-between text-muted small pt-2 border-top">
                       <span>Age: <strong className="text-dark">{m.calculatedAge} yrs</strong></span>
                       <span>DOB: {m.dateOfBirth ? <strong className="text-dark font-monospace">{m.dateOfBirth}</strong> : <span className="fst-italic">—</span>}</span>

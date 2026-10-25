@@ -5,6 +5,7 @@ import React from "react";
 import Logo from "@/components/Logo";
 import MemberAccessRequestsSection, { AccessRequestItem } from "@/components/MemberAccessRequestsSection";
 import MemberSubmissionsSection, { MemberSubmissionItem } from "@/components/MemberSubmissionsSection";
+import TrusteeRequestsSection, { PendingTrusteeItem } from "@/components/TrusteeRequestsSection";
 import VolunteerQrCard from "@/components/VolunteerQrCard";
 import { getPublicMemberFormUrl, generateMemberFormQrCodeDataUrl } from "@/lib/qr/qr-helper";
 import { maskMobile } from "@/lib/validation/family";
@@ -20,6 +21,7 @@ export default async function DashboardPage() {
     redirect("/login?error=TRUSTEE_NO_SANGH");
   }
 
+  const isTrustee = user.role === "TRUSTEE";
   const sanghFilter = getSanghAccessFilter(user);
 
   // Time boundary for today's registrations
@@ -40,6 +42,7 @@ export default async function DashboardPage() {
     rawPendingRequests,
     rawMemberSubmissions,
     pendingFormSubmissions,
+    rawPendingTrustees,
   ] = await Promise.all([
     prisma.family.count({
       where: { status: "ACTIVE", ...sanghFilter },
@@ -59,14 +62,18 @@ export default async function DashboardPage() {
     prisma.family.count({
       where: { status: "ACTIVE", createdAt: { gte: startOfToday }, ...sanghFilter },
     }),
-    prisma.memberAccessRequest.count({
-      where: { status: "PENDING", ...sanghFilter },
-    }),
-    prisma.memberAccessRequest.count({
-      where: { status: "APPROVED", ...sanghFilter },
-    }),
+    !isTrustee
+      ? prisma.memberAccessRequest.count({
+          where: { status: "PENDING", ...sanghFilter },
+        })
+      : Promise.resolve(0),
+    !isTrustee
+      ? prisma.memberAccessRequest.count({
+          where: { status: "APPROVED", ...sanghFilter },
+        })
+      : Promise.resolve(0),
     prisma.sangh.findMany({
-      where: user.role === "TRUSTEE" ? { id: user.sanghId || undefined, active: true } : { active: true },
+      where: isTrustee ? { id: user.sanghId || undefined, active: true } : { active: true },
       orderBy: { name: "asc" },
       include: {
         _count: {
@@ -77,35 +84,48 @@ export default async function DashboardPage() {
         },
       },
     }),
-    prisma.memberAccessRequest.findMany({
-      where: { status: "PENDING", ...sanghFilter },
-      include: {
-        family: { select: { familyId: true, headName: true, area: true } },
-        sangh: { select: { name: true, prefix: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.memberFormSubmission.findMany({
-      where: { ...sanghFilter },
-      include: {
-        family: {
-          select: {
-            familyId: true,
-            headName: true,
-            address: true,
-            area: true,
-            members: { where: { status: "ACTIVE" }, select: { id: true } },
+    !isTrustee
+      ? prisma.memberAccessRequest.findMany({
+          where: { status: "PENDING", ...sanghFilter },
+          include: {
+            family: { select: { familyId: true, headName: true, area: true } },
+            sangh: { select: { name: true, prefix: true } },
           },
-        },
-        sangh: { select: { name: true, prefix: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-    }),
-    prisma.memberFormSubmission.count({
-      where: { status: "PENDING", ...sanghFilter },
-    }),
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        })
+      : Promise.resolve([]),
+    !isTrustee
+      ? prisma.memberFormSubmission.findMany({
+          where: { ...sanghFilter },
+          include: {
+            family: {
+              select: {
+                familyId: true,
+                headName: true,
+                address: true,
+                area: true,
+                members: { where: { status: "ACTIVE" }, select: { id: true } },
+              },
+            },
+            sangh: { select: { name: true, prefix: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 40,
+        })
+      : Promise.resolve([]),
+    !isTrustee
+      ? prisma.memberFormSubmission.count({
+          where: { status: "PENDING", ...sanghFilter },
+        })
+      : Promise.resolve(0),
+    user.role === "ADMIN"
+      ? prisma.user.findMany({
+          where: { role: "TRUSTEE", status: "PENDING" },
+          include: { sangh: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   // Generate public member form QR code for volunteer desk
@@ -156,6 +176,21 @@ export default async function DashboardPage() {
     createdAt: s.createdAt.toISOString(),
   }));
 
+  // Transform raw pending trustees for Admin review component
+  const pendingTrustees: PendingTrusteeItem[] = ((rawPendingTrustees as any[]) || []).map((t) => ({
+    id: t.id,
+    username: t.username,
+    name: t.name,
+    email: t.email,
+    phone: t.phone,
+    role: t.role,
+    status: t.status,
+    sanghId: t.sanghId,
+    sanghName: t.sangh?.name || "Assigned Sangh",
+    sanghPrefix: t.sangh?.prefix || "",
+    createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt),
+  }));
+
   // Aggregate children count per Sangh
   const childrenPerSangh = await prisma.member.groupBy({
     by: ["sanghId"],
@@ -171,7 +206,6 @@ export default async function DashboardPage() {
   // Percentage calculations
   const attendingPct = totalChildren > 0 ? Math.round((childrenAttending / totalChildren) * 100) : 0;
 
-  const isTrustee = user.role === "TRUSTEE";
   const canRegister = user.role === "ADMIN" || user.role === "VOLUNTEER";
 
   return (
@@ -212,6 +246,11 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Admin: Pending Trustee Registration Requests */}
+      {user.role === "ADMIN" && (
+        <TrusteeRequestsSection initialTrustees={pendingTrustees} />
+      )}
 
       {/* Primary KPI Dashboard Cards */}
       <div className="row g-3 mb-4">
@@ -273,10 +312,12 @@ export default async function DashboardPage() {
       </div>
 
       {/* Pathshala & Member Access Summary Cards */}
-      <h2 className="h5 fw-bold text-dark mb-3">Pathshala Status &amp; Member Portal Requests</h2>
+      <h2 className="h5 fw-bold text-dark mb-3">
+        {isTrustee ? "Pathshala Status" : "Pathshala Status & Member Portal Requests"}
+      </h2>
       <div className="row g-3 mb-4">
         {/* Attending */}
-        <div className="col-6 col-md-3">
+        <div className={isTrustee ? "col-12 col-md-6" : "col-6 col-md-3"}>
           <div className="card-clean p-3 border-success-subtle h-100">
             <div className="d-flex align-items-center gap-3">
               <div className="rounded-circle p-3 bg-success-subtle text-success fs-4">
@@ -292,7 +333,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Not Attending */}
-        <div className="col-6 col-md-3">
+        <div className={isTrustee ? "col-12 col-md-6" : "col-6 col-md-3"}>
           <div className="card-clean p-3 border-danger-subtle h-100">
             <div className="d-flex align-items-center gap-3">
               <div className="rounded-circle p-3 bg-danger-subtle text-danger fs-4">
@@ -307,44 +348,51 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Pending Member Access */}
-        <div className="col-6 col-md-3">
-          <div className="card-clean p-3 border-warning-subtle h-100">
-            <div className="d-flex align-items-center gap-3">
-              <div className="rounded-circle p-3 bg-warning-subtle text-warning-emphasis fs-4">
-                <i className="bi bi-hourglass-split"></i>
-              </div>
-              <div>
-                <div className="text-muted small fw-semibold">Pending Requests</div>
-                <div className="fs-3 fw-bold text-warning-emphasis">{pendingAccessRequests}</div>
-                <small className="text-muted">Awaiting validation</small>
+        {/* Member Access Summary Cards (Admin & Volunteer only) */}
+        {!isTrustee && (
+          <>
+            {/* Pending Member Access */}
+            <div className="col-6 col-md-3">
+              <div className="card-clean p-3 border-warning-subtle h-100">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="rounded-circle p-3 bg-warning-subtle text-warning-emphasis fs-4">
+                    <i className="bi bi-hourglass-split"></i>
+                  </div>
+                  <div>
+                    <div className="text-muted small fw-semibold">Pending Requests</div>
+                    <div className="fs-3 fw-bold text-warning-emphasis">{pendingAccessRequests}</div>
+                    <small className="text-muted">Awaiting validation</small>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Approved Member Access */}
-        <div className="col-6 col-md-3">
-          <div className="card-clean p-3 border-info-subtle h-100">
-            <div className="d-flex align-items-center gap-3">
-              <div className="rounded-circle p-3 bg-info-subtle text-info-emphasis fs-4">
-                <i className="bi bi-shield-check"></i>
-              </div>
-              <div>
-                <div className="text-muted small fw-semibold">Approved Access</div>
-                <div className="fs-3 fw-bold text-dark">{approvedAccessRequests}</div>
-                <small className="text-info fw-medium">Active member sessions</small>
+            {/* Approved Member Access */}
+            <div className="col-6 col-md-3">
+              <div className="card-clean p-3 border-info-subtle h-100">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="rounded-circle p-3 bg-info-subtle text-info-emphasis fs-4">
+                    <i className="bi bi-shield-check"></i>
+                  </div>
+                  <div>
+                    <div className="text-muted small fw-semibold">Approved Access</div>
+                    <div className="fs-3 fw-bold text-dark">{approvedAccessRequests}</div>
+                    <small className="text-info fw-medium">Active member sessions</small>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Member Form Submissions (Volunteer / Admin review and validation component) */}
-      <MemberSubmissionsSection
-        initialSubmissions={memberSubmissions}
-        canManage={!isTrustee}
-      />
+      {/* Member Form Submissions (Volunteer / Admin only) */}
+      {!isTrustee && (
+        <MemberSubmissionsSection
+          initialSubmissions={memberSubmissions}
+          canManage={!isTrustee}
+        />
+      )}
 
       {/* Volunteer Desk Portal QR Card */}
       {!isTrustee && (
@@ -354,11 +402,13 @@ export default async function DashboardPage() {
         />
       )}
 
-      {/* Section 6: Member Access Requests (Interactive live volunteer validation component) */}
-      <MemberAccessRequestsSection
-        initialRequests={pendingRequests}
-        canManage={!isTrustee}
-      />
+      {/* Section 6: Member Access Requests (Volunteer / Admin only) */}
+      {!isTrustee && (
+        <MemberAccessRequestsSection
+          initialRequests={pendingRequests}
+          canManage={!isTrustee}
+        />
+      )}
 
       {/* Sangh Summary Table & Cards */}
       <div className="d-flex justify-content-between align-items-center mb-3">

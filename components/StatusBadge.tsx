@@ -53,11 +53,13 @@ export default function StatusBadge({ type, value }: StatusBadgeProps) {
   }
 
   if (type === "status") {
-    return value === "ACTIVE" ? (
-      <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Active</span>
-    ) : (
-      <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">Disabled</span>
-    );
+    if (value === "ACTIVE") {
+      return <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i className="bi bi-check-circle-fill me-1"></i>Active</span>;
+    }
+    if (value === "PENDING") {
+      return <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1"><i className="bi bi-hourglass-split me-1"></i>Pending Verification</span>;
+    }
+    return <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1"><i className="bi bi-slash-circle me-1"></i>Disabled</span>;
   }
 
   if (type === "sync") {

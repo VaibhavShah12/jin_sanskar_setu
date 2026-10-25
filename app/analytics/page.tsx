@@ -10,9 +10,9 @@ export default async function AnalyticsPage() {
   const user = await requireAuth();
   const sanghFilter = getSanghAccessFilter(user);
 
-  // Fetch active Sanghs
+  // Fetch active Sanghs (Trustees are restricted to their assigned Sangh)
   const sanghs = await prisma.sangh.findMany({
-    where: { active: true },
+    where: user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId, active: true } : { active: true },
     orderBy: { name: "asc" },
   });
 

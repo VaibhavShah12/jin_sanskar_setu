@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import { getMemberCalculatedAge } from "@/lib/validation/family";
+import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 import React from "react";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ interface MembersPageProps {
     page?: string;
     q?: string;
     sanghId?: string;
-    pathshalaStatus?: string;
+    interest?: string;
     isChild?: string;
   };
 }
@@ -24,7 +25,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
   const pageSize = 20;
   const q = searchParams.q?.trim() || "";
   const requestedSanghId = searchParams.sanghId || undefined;
-  const pathshalaStatus = searchParams.pathshalaStatus || undefined;
+  const interest = searchParams.interest || undefined;
   const isChild = searchParams.isChild === "true";
 
   const sanghFilter = getSanghAccessFilter(user, requestedSanghId);
@@ -46,8 +47,8 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
     ...searchFilter,
   };
 
-  if (pathshalaStatus) {
-    whereClause.pathshalaStatus = pathshalaStatus;
+  if (interest) {
+    whereClause.interests = { has: interest };
   }
 
   if (isChild) {
@@ -66,7 +67,10 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
       take: pageSize,
     }),
     prisma.member.count({ where: whereClause }),
-    prisma.sangh.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.sangh.findMany({
+      where: user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId, active: true } : { active: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -120,14 +124,16 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
 
           <div className="col-6 col-md-3">
             <select
-              name="pathshalaStatus"
-              defaultValue={pathshalaStatus || ""}
+              name="interest"
+              defaultValue={interest || ""}
               className="form-select"
             >
-              <option value="">Pathshala: All</option>
-              <option value="YES">Attending (YES)</option>
-              <option value="NO">Not Attending (NO)</option>
-              <option value="PREVIOUSLY_ATTENDED">Previously Attended</option>
+              <option value="">Interests: All</option>
+              {MEMBER_INTERESTS.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label} ({item.hindiLabel})
+                </option>
+              ))}
             </select>
           </div>
 
@@ -135,7 +141,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
             <button type="submit" className="btn btn-primary w-100">
               Filter
             </button>
-            {q || requestedSanghId || pathshalaStatus ? (
+            {q || requestedSanghId || interest ? (
               <Link href="/members" className="btn btn-outline-secondary">
                 Reset
               </Link>
@@ -166,7 +172,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                     <th>Relationship</th>
                     <th>Family ID</th>
                     <th>Sangh</th>
-                    <th>Pathshala</th>
+                    <th>Field of Interests</th>
                     <th className="text-end pe-4">Action</th>
                   </tr>
                 </thead>
@@ -207,7 +213,26 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                         <td>
                           <span className="badge-sangh font-monospace">{m.sangh.prefix}</span>
                         </td>
-                        <td><StatusBadge type="pathshala" value={m.pathshalaStatus} /></td>
+                        <td>
+                          {m.interests && m.interests.length > 0 ? (
+                            <div className="d-flex flex-wrap gap-1" style={{ maxWidth: "240px" }}>
+                              {m.interests.map((interestKey: string) => {
+                                const opt = MEMBER_INTERESTS.find((i) => i.key === interestKey);
+                                return (
+                                  <span
+                                    key={interestKey}
+                                    className="badge bg-primary-subtle text-primary border border-primary-subtle"
+                                    title={opt ? opt.hindiLabel : interestKey}
+                                  >
+                                    {opt ? opt.label : interestKey}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-muted small">—</span>
+                          )}
+                        </td>
                         <td className="text-end pe-4">
                           <Link href={`/members/${m.id}`} className="btn btn-outline-secondary btn-sm">
                             View
@@ -247,8 +272,26 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                     </div>
                   </div>
 
-                  <div className="d-flex justify-content-between align-items-center pt-2 border-top">
-                    <StatusBadge type="pathshala" value={m.pathshalaStatus} />
+                  {m.interests && m.interests.length > 0 && (
+                    <div className="pt-2 border-top small mb-2">
+                      <span className="text-muted d-block fs-8 mb-1">Field of Interests (रुचि):</span>
+                      <div className="d-flex flex-wrap gap-1">
+                        {m.interests.map((interestKey: string) => {
+                          const opt = MEMBER_INTERESTS.find((i) => i.key === interestKey);
+                          return (
+                            <span
+                              key={interestKey}
+                              className="badge bg-primary-subtle text-primary border border-primary-subtle"
+                            >
+                              {opt ? `${opt.label} (${opt.hindiLabel})` : interestKey}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="d-flex justify-content-end align-items-center pt-2 border-top">
                     <Link href={`/members/${m.id}`} className="btn btn-outline-primary btn-sm">
                       View Profile
                     </Link>
@@ -267,7 +310,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
               <div className="btn-group">
                 {page > 1 ? (
                   <Link
-                    href={`/members?page=${page - 1}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&pathshalaStatus=${pathshalaStatus || ""}`}
+                    href={`/members?page=${page - 1}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&interest=${interest || ""}`}
                     className="btn btn-outline-secondary btn-sm"
                   >
                     Previous
@@ -275,7 +318,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                 ) : null}
                 {page < totalPages ? (
                   <Link
-                    href={`/members?page=${page + 1}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&pathshalaStatus=${pathshalaStatus || ""}`}
+                    href={`/members?page=${page + 1}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&interest=${interest || ""}`}
                     className="btn btn-outline-secondary btn-sm"
                   >
                     Next

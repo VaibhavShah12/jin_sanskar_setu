@@ -79,6 +79,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
           preferredTime: "NO_PREFERENCE",
           preferredWeekdays: "",
           transportPreference: null,
+          whatsappNumber: "",
         },
       ],
     }));
@@ -682,7 +683,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                       {/* Relationship */}
                       <div className="col-6 col-sm-4 col-md-2">
                         <label className="form-label small fw-semibold text-dark mb-1">
-                          Relationship to Head
+                          Relationship
                         </label>
                         <select
                           className="form-select form-select-sm"
@@ -701,6 +702,22 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                           <option value="GRANDCHILD">Grandchild</option>
                           <option value="OTHER">Other</option>
                         </select>
+                      </div>
+
+                      {/* Individual WhatsApp Number (Optional) */}
+                      <div className="col-12 col-sm-6 col-md-3">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          <i className="bi bi-whatsapp text-success me-1"></i>WhatsApp No. <span className="text-muted fw-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={15}
+                          className="form-control form-control-sm"
+                          placeholder="Individual WhatsApp (optional)"
+                          value={member.whatsappNumber || ""}
+                          onChange={(e) => updateMember(idx, "whatsappNumber", e.target.value)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -817,7 +834,14 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                   {formData.members.map((m, idx) => (
                     <tr key={idx}>
                       <td>{idx + 2}</td>
-                      <td className="fw-semibold">{m.name}</td>
+                      <td className="fw-semibold">
+                        {m.name}
+                        {m.whatsappNumber && (
+                          <div className="small text-success fw-normal">
+                            <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
+                          </div>
+                        )}
+                      </td>
                       <td>
                         <span className="fw-semibold">{m.age} yrs</span>
                         {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}

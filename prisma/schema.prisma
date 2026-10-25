@@ -25,6 +25,7 @@ enum Role {
 enum UserStatus {
   ACTIVE
   DISABLED
+  PENDING
 }
 
 enum RecordStatus {
@@ -121,6 +122,7 @@ model User {
   passwordHash       String      // bcrypt hashed password
   name               String?
   email              String?     @unique // Optional contact email
+  phone              String?     // Contact mobile / phone
   image              String?
   role               Role        @default(VOLUNTEER)
   status             UserStatus  @default(ACTIVE)
@@ -228,6 +230,7 @@ model Member {
   noInterestReason    String?         // Comment/reason if pathshalaInterest is NO
   status            RecordStatus      @default(ACTIVE)
   interests         String[]          @default([])
+  whatsappNumber    String?           // Individual WhatsApp contact number
   whatsappConsent          Boolean    @default(false)
   whatsappConsentDate      DateTime?
   whatsappConsentSource    String?    // e.g. "SURVEY_FORM", "VOLUNTEER_VERIFIED", "MEMBER_PORTAL", "ADMIN_UPDATE", "TRUSTEE_UPDATE"

@@ -53,7 +53,10 @@ export default async function FamiliesPage({ searchParams }: FamiliesPageProps) 
       take: pageSize,
     }),
     prisma.family.count({ where: whereClause }),
-    prisma.sangh.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.sangh.findMany({
+      where: user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId, active: true } : { active: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const totalPages = Math.ceil(totalCount / pageSize);

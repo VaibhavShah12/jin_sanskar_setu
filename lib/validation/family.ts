@@ -176,6 +176,7 @@ export const MemberInputSchema = z
     preferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),
     preferredWeekdays: z.string().optional().nullable(),
     transportPreference: z.string().optional().nullable(),
+    whatsappNumber: z.string().optional().nullable(),
   })
   .superRefine((data, ctx) => {
     if (data.dateOfBirth && data.dateOfBirth.trim()) {

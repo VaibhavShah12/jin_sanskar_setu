@@ -7,6 +7,8 @@ import {
   updateUserStatusAction,
   updateUserRoleAndSanghAction,
   adminResetUserPasswordAction,
+  approveTrusteeAction,
+  rejectTrusteeAction,
 } from "@/lib/actions/user-actions";
 import { Role, UserStatus } from "@prisma/client";
 
@@ -50,6 +52,42 @@ export default function AdminUserManagementClient({
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [generatedTempPassword, setGeneratedTempPassword] = useState<string | null>(null);
   const [tempPasswordCopied, setTempPasswordCopied] = useState(false);
+
+  // Pending Trustee Management State
+  const [exportPermMap, setExportPermMap] = useState<Record<string, boolean>>({});
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+
+  const pendingTrustees = users.filter((u) => u.status === "PENDING");
+
+  const handleApproveTrustee = async (user: any, canExport: boolean = false) => {
+    clearMessages();
+    setApprovingId(user.id);
+    const res = await approveTrusteeAction(user.id, canExport);
+    setApprovingId(null);
+    if (!res.success) {
+      setErrorMsg(res.error || "Failed to approve trustee.");
+      return;
+    }
+    setUsers(users.map((u) => (u.id === user.id ? { ...u, status: "ACTIVE", canExport } : u)));
+    setSuccessMsg(`Trustee "${user.username}" for ${user.sangh?.name || "Sangh"} has been verified & approved. They can now log in.`);
+  };
+
+  const handleRejectTrustee = async (user: any) => {
+    if (!window.confirm(`Are you sure you want to reject the trustee registration request for "${user.username}"?`)) {
+      return;
+    }
+    clearMessages();
+    setRejectingId(user.id);
+    const res = await rejectTrusteeAction(user.id);
+    setRejectingId(null);
+    if (!res.success) {
+      setErrorMsg(res.error || "Failed to reject trustee.");
+      return;
+    }
+    setUsers(users.filter((u) => u.id !== user.id));
+    setSuccessMsg(`Trustee registration request for "${user.username}" has been rejected.`);
+  };
 
   const resetAddForm = () => {
     setNewUsername("");
@@ -262,6 +300,130 @@ export default function AdminUserManagementClient({
         </div>
       )}
 
+      {/* ===================== PENDING TRUSTEE REGISTRATION REQUESTS ===================== */}
+      {pendingTrustees.length > 0 && (
+        <div className="card-clean border-warning shadow-sm mb-4 bg-white overflow-hidden">
+          <div className="p-3 bg-warning-subtle border-bottom border-warning-subtle d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+            <div className="d-flex align-items-center gap-2">
+              <span className="badge bg-warning text-dark px-2 py-1 fs-6">
+                <i className="bi bi-hourglass-split me-1"></i>
+                {pendingTrustees.length} Pending
+              </span>
+              <h5 className="fw-bold text-dark mb-0">Trustee Registration Requests</h5>
+            </div>
+            <span className="text-secondary small">
+              Verification required by Administrator before login activation
+            </span>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table table-hover align-middle mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th className="ps-3">Applicant Name &amp; Username</th>
+                  <th>Designated Sangh</th>
+                  <th>Contact Details</th>
+                  <th>Requested Date</th>
+                  <th>Allow CSV Export?</th>
+                  <th className="text-end pe-3">Verification Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingTrustees.map((u) => {
+                  const assignedSangh = sanghs.find((s) => s.id === u.sanghId);
+                  const isBusy = approvingId === u.id || rejectingId === u.id;
+                  return (
+                    <tr key={u.id} className="table-warning-subtle">
+                      <td className="ps-3">
+                        <strong className="d-block text-dark">{u.name || u.username}</strong>
+                        <span className="font-monospace small text-primary">{u.username}</span>
+                      </td>
+                      <td>
+                        {assignedSangh ? (
+                          <span className="badge-sangh font-monospace">
+                            {assignedSangh.prefix} — {assignedSangh.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted small">No Sangh</span>
+                        )}
+                      </td>
+                      <td className="small">
+                        {u.phone && (
+                          <div className="text-dark d-flex align-items-center gap-1">
+                            <i className="bi bi-telephone text-primary"></i>
+                            <a href={`tel:${u.phone}`} className="text-decoration-none fw-semibold">
+                              {u.phone}
+                            </a>
+                          </div>
+                        )}
+                        {u.email && (
+                          <div className="text-muted d-flex align-items-center gap-1">
+                            <i className="bi bi-envelope"></i>
+                            <span>{u.email}</span>
+                          </div>
+                        )}
+                        {!u.phone && !u.email && <span className="text-muted">—</span>}
+                      </td>
+                      <td className="small text-muted">
+                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "Recent"}
+                      </td>
+                      <td>
+                        <div className="form-check form-switch mb-0">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            id={`export-pending-${u.id}`}
+                            checked={Boolean(exportPermMap[u.id])}
+                            onChange={(e) =>
+                              setExportPermMap({ ...exportPermMap, [u.id]: e.target.checked })
+                            }
+                          />
+                          <label className="form-check-label small" htmlFor={`export-pending-${u.id}`}>
+                            Enable Export
+                          </label>
+                        </div>
+                      </td>
+                      <td className="text-end pe-3">
+                        <div className="d-flex justify-content-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveTrustee(u, Boolean(exportPermMap[u.id]))}
+                            disabled={isBusy}
+                            className="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm px-3 fw-semibold"
+                            title="Verify and activate trustee login"
+                          >
+                            {approvingId === u.id ? (
+                              <span className="spinner-border spinner-border-sm" role="status"></span>
+                            ) : (
+                              <i className="bi bi-check-circle-fill"></i>
+                            )}
+                            <span>Verify &amp; Approve</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectTrustee(u)}
+                            disabled={isBusy}
+                            className="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                            title="Reject and delete request"
+                          >
+                            {rejectingId === u.id ? (
+                              <span className="spinner-border spinner-border-sm" role="status"></span>
+                            ) : (
+                              <i className="bi bi-trash"></i>
+                            )}
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Main Card */}
       <div className="card-clean p-0 overflow-hidden shadow-sm">
         {/* Card Header */}
@@ -359,45 +521,68 @@ export default function AdminUserManagementClient({
                     </td>
                     <td className="text-end pe-3">
                       <div className="d-flex gap-1 justify-content-end flex-wrap">
-                        {/* Edit */}
-                        <button
-                          onClick={() => openEditModal(u)}
-                          disabled={loading}
-                          className="btn btn-sm btn-outline-secondary"
-                          title="Edit user"
-                        >
-                          <i className="bi bi-pencil"></i>
-                        </button>
-                        {/* Change Password */}
-                        <button
-                          onClick={() => openPasswordModal(u)}
-                          disabled={loading}
-                          className="btn btn-sm btn-outline-warning"
-                          title="Change password"
-                        >
-                          <i className="bi bi-key"></i>
-                        </button>
-                        {/* Enable / Disable */}
-                        {!isSelf && (
-                          <button
-                            onClick={() => handleToggleStatus(u)}
-                            disabled={loading}
-                            className={`btn btn-sm ${
-                              u.status === "ACTIVE"
-                                ? "btn-outline-danger"
-                                : "btn-outline-success"
-                            }`}
-                            title={u.status === "ACTIVE" ? "Disable user" : "Enable user"}
-                          >
-                            {u.status === "ACTIVE" ? (
-                              <i className="bi bi-slash-circle"></i>
-                            ) : (
-                              <i className="bi bi-check-circle"></i>
+                        {u.status === "PENDING" ? (
+                          <>
+                            <button
+                              onClick={() => handleApproveTrustee(u, Boolean(u.canExport))}
+                              disabled={approvingId === u.id || rejectingId === u.id}
+                              className="btn btn-sm btn-success"
+                              title="Verify & Approve Trustee"
+                            >
+                              <i className="bi bi-check-lg"></i>
+                            </button>
+                            <button
+                              onClick={() => handleRejectTrustee(u)}
+                              disabled={approvingId === u.id || rejectingId === u.id}
+                              className="btn btn-sm btn-outline-danger"
+                              title="Reject Request"
+                            >
+                              <i className="bi bi-x-lg"></i>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* Edit */}
+                            <button
+                              onClick={() => openEditModal(u)}
+                              disabled={loading}
+                              className="btn btn-sm btn-outline-secondary"
+                              title="Edit user"
+                            >
+                              <i className="bi bi-pencil"></i>
+                            </button>
+                            {/* Change Password */}
+                            <button
+                              onClick={() => openPasswordModal(u)}
+                              disabled={loading}
+                              className="btn btn-sm btn-outline-warning"
+                              title="Change password"
+                            >
+                              <i className="bi bi-key"></i>
+                            </button>
+                            {/* Enable / Disable */}
+                            {!isSelf && (
+                              <button
+                                onClick={() => handleToggleStatus(u)}
+                                disabled={loading}
+                                className={`btn btn-sm ${
+                                  u.status === "ACTIVE"
+                                    ? "btn-outline-danger"
+                                    : "btn-outline-success"
+                                }`}
+                                title={u.status === "ACTIVE" ? "Disable user" : "Enable user"}
+                              >
+                                {u.status === "ACTIVE" ? (
+                                  <i className="bi bi-slash-circle"></i>
+                                ) : (
+                                  <i className="bi bi-check-circle"></i>
+                                )}
+                              </button>
                             )}
-                          </button>
-                        )}
-                        {isSelf && (
-                          <span className="badge bg-light text-muted border small">You</span>
+                            {isSelf && (
+                              <span className="badge bg-light text-muted border small">You</span>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>

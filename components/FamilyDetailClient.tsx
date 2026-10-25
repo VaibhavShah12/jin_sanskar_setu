@@ -7,6 +7,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import { archiveFamilyAction, archiveMemberAction } from "@/lib/actions/family-actions";
 import { getMemberCalculatedAge } from "@/lib/validation/family";
+import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 
 interface FamilyDetailClientProps {
   family: any;
@@ -149,9 +150,7 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                 <th>Age / DOB</th>
                 <th>Gender</th>
                 <th>Relationship</th>
-                <th>Pathshala Status</th>
-                <th>Conveyance</th>
-                <th>Preferred Schedule</th>
+                <th>Field of Interests</th>
                 <th className="text-end pe-4">Actions</th>
               </tr>
             </thead>
@@ -178,6 +177,11 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                       {m.status === "ARCHIVED" && (
                         <span className="badge bg-secondary ms-1">Archived</span>
                       )}
+                      {m.whatsappNumber && (
+                        <div className="small text-success fw-normal mt-1">
+                          <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <span className="fw-semibold text-dark">{calculatedAge} yrs</span>
@@ -188,30 +192,24 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                     </td>
                     <td className="text-capitalize">{m.gender.toLowerCase().replace(/_/g, " ")}</td>
                     <td>{m.relationship}</td>
-                    <td><StatusBadge type="pathshala" value={m.pathshalaStatus} /></td>
                     <td>
-                      {m.transportPreference === "PICK_AND_DROP" ? (
-                        <span className="badge bg-success-subtle text-success border border-success-subtle">
-                          🚐 Pick &amp; Drop
-                        </span>
-                      ) : m.transportPreference === "BY_SELF" ? (
-                        <span className="badge bg-light text-dark border">
-                          🚶 By Self
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="small text-muted">
-                      {m.preferredDay === "WEEKDAY" && m.preferredWeekdays ? (
-                        <div>
-                          <div>Weekday ({m.preferredWeekdays})</div>
-                          <div className="text-secondary small">{m.preferredTime}</div>
+                      {m.interests && m.interests.length > 0 ? (
+                        <div className="d-flex flex-wrap gap-1" style={{ maxWidth: "280px" }}>
+                          {m.interests.map((interestKey: string) => {
+                            const opt = MEMBER_INTERESTS.find((i) => i.key === interestKey);
+                            return (
+                              <span
+                                key={interestKey}
+                                className="badge bg-primary-subtle text-primary border border-primary-subtle"
+                                title={opt ? opt.hindiLabel : interestKey}
+                              >
+                                {opt ? opt.label : interestKey}
+                              </span>
+                            );
+                          })}
                         </div>
-                      ) : m.preferredDay !== "NO_PREFERENCE" || m.preferredTime !== "NO_PREFERENCE" ? (
-                        `${m.preferredDay}, ${m.preferredTime}`
                       ) : (
-                        "No preference"
+                        <span className="text-muted small">—</span>
                       )}
                     </td>
                     <td className="text-end pe-4">
@@ -259,6 +257,11 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                     {m.name} {m.relationship === "HEAD" && <span className="badge bg-secondary ms-1">Head</span>}
                     {m.status === "ARCHIVED" && <span className="badge bg-secondary ms-1">Archived</span>}
                   </h6>
+                  {m.whatsappNumber && (
+                    <div className="small text-success mt-1">
+                      <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
+                    </div>
+                  )}
                 </div>
                 <div className="text-end">
                   <span className="badge bg-light text-secondary border">
@@ -270,34 +273,24 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                 </div>
               </div>
 
-              <div className="row g-2 pt-2 border-top small mb-2">
-                <div className="col-6">
-                  <span className="text-muted d-block fs-8">Pathshala:</span>
-                  <StatusBadge type="pathshala" value={m.pathshalaStatus} />
-                </div>
-                <div className="col-6">
-                  <span className="text-muted d-block fs-8">Conveyance:</span>
-                  {m.transportPreference === "PICK_AND_DROP" ? (
-                    <span className="badge bg-success-subtle text-success border border-success-subtle">
-                      🚐 Pick &amp; Drop
-                    </span>
-                  ) : m.transportPreference === "BY_SELF" ? (
-                    <span className="badge bg-light text-dark border">
-                      🚶 By Self
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </div>
-                {(m.preferredDay !== "NO_PREFERENCE" || m.preferredTime !== "NO_PREFERENCE") && (
-                  <div className="col-12">
-                    <span className="text-muted fs-8">Schedule: </span>
-                    <span className="text-dark">
-                      {m.preferredDay === "WEEKDAY" && m.preferredWeekdays
-                        ? `Weekday (${m.preferredWeekdays}), ${m.preferredTime}`
-                        : `${m.preferredDay}, ${m.preferredTime}`}
-                    </span>
+              <div className="pt-2 border-top small mb-2">
+                <span className="text-muted d-block fs-8 mb-1">Field of Interests (रुचि):</span>
+                {m.interests && m.interests.length > 0 ? (
+                  <div className="d-flex flex-wrap gap-1">
+                    {m.interests.map((interestKey: string) => {
+                      const opt = MEMBER_INTERESTS.find((i) => i.key === interestKey);
+                      return (
+                        <span
+                          key={interestKey}
+                          className="badge bg-primary-subtle text-primary border border-primary-subtle"
+                        >
+                          {opt ? `${opt.label} (${opt.hindiLabel})` : interestKey}
+                        </span>
+                      );
+                    })}
                   </div>
+                ) : (
+                  <span className="text-muted small fst-italic">None specified</span>
                 )}
               </div>
 

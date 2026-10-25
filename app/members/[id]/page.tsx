@@ -1,7 +1,7 @@
 import { requireAuth } from "@/lib/auth/auth-helpers";
 import { prisma } from "@/lib/db/prisma";
-import StatusBadge from "@/components/StatusBadge";
 import MemberDetailActions from "@/components/MemberDetailActions";
+import StatusBadge from "@/components/StatusBadge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import React from "react";
@@ -149,6 +149,21 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
               <i className="bi bi-telephone me-1"></i> {member.family.mobile}
             </a>
           </div>
+          <div className="col-6 col-md-3">
+            <span className="text-muted small d-block">Individual WhatsApp</span>
+            {member.whatsappNumber ? (
+              <a
+                href={`https://wa.me/91${member.whatsappNumber}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-decoration-none fw-semibold text-success d-inline-flex align-items-center gap-1"
+              >
+                <i className="bi bi-whatsapp"></i> {member.whatsappNumber}
+              </a>
+            ) : (
+              <span className="text-muted small">Not provided</span>
+            )}
+          </div>
           <div className="col-12 col-md-6">
             <span className="text-muted small d-block">Head of Family</span>
             <span className="fw-semibold text-dark">{member.family.headName}</span>
@@ -160,53 +175,6 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
         </div>
       </div>
 
-      {/* Pathshala Profile Card */}
-      <div className="card-clean p-4 mb-4 bg-white">
-        <h3 className="h5 fw-bold text-dark mb-3 border-bottom pb-2">
-          Pathshala &amp; Religious Education Status
-        </h3>
-
-        <div className="row g-3">
-          <div className="col-12 col-sm-6 col-md-4">
-            <span className="text-muted small d-block mb-1">Current Attendance Status</span>
-            <StatusBadge type="pathshala" value={member.pathshalaStatus} />
-          </div>
-
-          <div className="col-12 col-sm-6 col-md-4">
-            <span className="text-muted small d-block mb-1">Preferred Day</span>
-            <strong className="text-dark d-block">
-              {member.preferredDay !== "NO_PREFERENCE" ? member.preferredDay : "No Specific Preference"}
-            </strong>
-            {member.preferredDay === "WEEKDAY" && member.preferredWeekdays && (
-              <span className="badge bg-primary-subtle text-primary border border-primary-subtle mt-1">
-                {member.preferredWeekdays}
-              </span>
-            )}
-          </div>
-
-          <div className="col-12 col-sm-6 col-md-4">
-            <span className="text-muted small d-block mb-1">Preferred Time</span>
-            <strong className="text-dark">
-              {member.preferredTime !== "NO_PREFERENCE" ? member.preferredTime : "No Specific Preference"}
-            </strong>
-          </div>
-
-          <div className="col-12 col-md-6">
-            <span className="text-muted small d-block mb-1">Conveyance / Pick &amp; Drop (पिक-एंड-ड्रॉप)</span>
-            {member.transportPreference === "PICK_AND_DROP" ? (
-              <span className="badge bg-success-subtle text-success fs-6 fw-semibold border border-success-subtle px-2 py-1">
-                🚐 Wants Pick &amp; Drop Service (पिक-एंड-ड्रॉप सेवा)
-              </span>
-            ) : member.transportPreference === "BY_SELF" ? (
-              <span className="badge bg-light text-dark fs-6 border px-2 py-1">
-                🚶 By Self / Parents Conveyance (स्वयं द्वारा)
-              </span>
-            ) : (
-              <span className="text-muted small">No conveyance preference specified</span>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Interests Card */}
       <div className="card-clean p-4 mb-4 bg-white">

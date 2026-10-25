@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function AdminBirthdaysPage() {
-  redirect("/birthdays");
+export default function AdminBirthdaysPage() {
+  redirect("/dashboard");
 }

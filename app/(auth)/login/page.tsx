@@ -2,6 +2,7 @@
 
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import React, { useEffect, useState, Suspense } from "react";
 import Logo from "@/components/Logo";
 
@@ -17,6 +18,7 @@ function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false);
 
   const errorParam = searchParams.get("error");
+  const registeredParam = searchParams.get("registered");
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -24,14 +26,20 @@ function LoginFormContent() {
     }
   }, [status, router]);
 
-  // Map URL error params from NextAuth
+  // Map URL error and status params from NextAuth
   useEffect(() => {
-    if (errorParam === "CredentialsSignin") {
+    if (registeredParam === "trustee_pending") {
+      setError("Registration submitted successfully! Your account is pending Administrator verification before login is enabled.");
+    } else if (errorParam === "CredentialsSignin") {
       setError("Invalid username or password. Please try again.");
+    } else if (errorParam === "ACCOUNT_PENDING_APPROVAL") {
+      setError("Your Trustee account is pending verification by the Administrator. Please wait for approval before logging in.");
     } else if (errorParam === "ACCOUNT_DISABLED") {
       setError("Your account has been disabled. Contact your administrator.");
+    } else if (errorParam === "TRUSTEE_NO_SANGH") {
+      setError("Trustee account has no assigned Sangh. Please contact your administrator.");
     }
-  }, [errorParam]);
+  }, [errorParam, registeredParam]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +60,9 @@ function LoginFormContent() {
       });
 
       if (result?.error) {
-        if (result.error === "ACCOUNT_DISABLED") {
+        if (result.error === "ACCOUNT_PENDING_APPROVAL") {
+          setError("Your Trustee account is pending verification by the Administrator. Once verified, you will be able to log in.");
+        } else if (result.error === "ACCOUNT_DISABLED") {
           setError("Your account has been disabled. Contact your Sangh administrator.");
         } else {
           setError("Invalid username or password. Please try again.");
@@ -193,6 +203,23 @@ function LoginFormContent() {
             )}
           </button>
         </form>
+
+        {/* Trustee Registration Link */}
+        <div className="mt-4 pt-3 border-top text-center">
+          <p className="small text-muted mb-2">Are you a Jain Sangh Trustee?</p>
+          <Link
+            href="/register-trustee"
+            id="register-trustee-link"
+            className="btn btn-outline-primary btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+          >
+            <i className="bi bi-person-badge"></i>
+            <span>Register for Trustee Access</span>
+          </Link>
+          <div className="text-muted small mt-2" style={{ fontSize: "0.75rem" }}>
+            <i className="bi bi-shield-check me-1"></i>
+            Trustee requests are verified by the Administrator prior to login activation.
+          </div>
+        </div>
 
         <p className="text-center text-muted small mt-4 mb-0">
           <i className="bi bi-database-fill-lock me-1"></i>

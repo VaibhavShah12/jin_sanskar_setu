@@ -11,6 +11,11 @@ export default function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // While registering for trustee without an active session, no navbar above is needed
+  if (pathname === "/register-trustee" && !session?.user) {
+    return null;
+  }
+
   // If on login or unauthorized page, render minimal header
   if (pathname === "/login" || pathname === "/unauthorized") {
     return (
@@ -115,14 +120,6 @@ export default function Navbar() {
                   className={`nav-link px-3 fw-medium ${isActive("/analytics") ? "active text-primary fw-bold" : ""}`}
                 >
                   <i className="bi bi-pie-chart-fill me-1"></i> Analytics
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  href="/birthdays"
-                  className={`nav-link px-3 fw-medium ${isActive("/birthdays") ? "active text-primary fw-bold" : ""}`}
-                >
-                  <i className="bi bi-cake2-fill me-1 text-danger"></i> Birthdays
                 </Link>
               </li>
               {!isTrustee && (
@@ -288,13 +285,6 @@ export default function Navbar() {
                 className={`list-group-item list-group-item-action border-0 py-2 ${isActive("/analytics") ? "fw-bold text-primary" : ""}`}
               >
                 <i className="bi bi-pie-chart-fill me-2"></i> Community Analytics
-              </Link>
-              <Link
-                href="/birthdays"
-                onClick={() => setMobileMenuOpen(false)}
-                className={`list-group-item list-group-item-action border-0 py-2 ${isActive("/birthdays") ? "fw-bold text-primary" : ""}`}
-              >
-                <i className="bi bi-cake2-fill me-2 text-danger"></i> Birthdays &amp; Greetings
               </Link>
               {canExport && (
                 <Link
