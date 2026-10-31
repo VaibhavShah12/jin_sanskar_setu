@@ -50,7 +50,19 @@ export default async function FamilyDetailPage({ params }: FamilyPageProps) {
   }
 
   const isAdmin = user.role === "ADMIN";
+  const isTrustee = user.role === "TRUSTEE";
+  const canViewLavaajam = isAdmin || isTrustee;
   const canEdit = isAdmin || (user.role === "VOLUNTEER" && (!user.sanghId || user.sanghId === family.sanghId));
+
+  let lavaajamRecord = null;
+  if (canViewLavaajam) {
+    lavaajamRecord = await prisma.lavaajamRecord.findFirst({
+      where: {
+        familyId: family.id,
+        year: "2026-2027",
+      },
+    });
+  }
 
   return (
     <div className="container py-2 py-md-4">
@@ -73,6 +85,8 @@ export default async function FamilyDetailPage({ params }: FamilyPageProps) {
         family={family}
         isAdmin={isAdmin}
         canEdit={canEdit}
+        canViewLavaajam={canViewLavaajam}
+        lavaajamRecord={lavaajamRecord ? JSON.parse(JSON.stringify(lavaajamRecord)) : null}
       />
     </div>
   );

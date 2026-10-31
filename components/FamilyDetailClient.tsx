@@ -13,9 +13,16 @@ interface FamilyDetailClientProps {
   family: any;
   isAdmin: boolean;
   canEdit: boolean;
+  canViewLavaajam?: boolean;
+  lavaajamRecord?: any;
 }
 
-export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClientProps) {
+export default function FamilyDetailClient({
+  family,
+  isAdmin,
+  canViewLavaajam = false,
+  lavaajamRecord = null,
+}: FamilyDetailClientProps) {
   const router = useRouter();
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -125,10 +132,76 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
               {family.members.length} members
             </span>
           </div>
+          {family.nativePlace && (
+            <div className="col-12 col-sm-6 col-md-3">
+              <span className="text-muted small d-block">Native Village / Mul Gaam</span>
+              <strong className="fs-6 text-dark">
+                <i className="bi bi-house-door text-primary me-1"></i>
+                {family.nativePlace}
+              </strong>
+            </div>
+          )}
           <div className="col-12">
             <span className="text-muted small d-block">Residential Address</span>
             <span className="text-secondary">{family.address}</span>
           </div>
+
+          {/* Sangh Lavaajam Status (TRUSTEE & ADMIN ONLY) */}
+          {canViewLavaajam && (
+            <div className="col-12 mt-3 pt-3 border-top">
+              <div className="d-flex flex-wrap align-items-center justify-content-between p-3 rounded-3 bg-light border gap-2">
+                <div className="d-flex align-items-center gap-3">
+                  <div
+                    className={`p-2 rounded-circle d-flex align-items-center justify-content-center ${
+                      lavaajamRecord?.status === "PAID"
+                        ? "bg-success-subtle text-success"
+                        : "bg-warning-subtle text-warning-emphasis"
+                    }`}
+                    style={{ width: "42px", height: "42px" }}
+                  >
+                    <i
+                      className={`bi ${
+                        lavaajamRecord?.status === "PAID"
+                          ? "bi-check-circle-fill fs-5"
+                          : "bi-exclamation-circle-fill fs-5"
+                      }`}
+                    ></i>
+                  </div>
+                  <div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="fw-bold text-dark">Sangh Lavaajam (2026-2027)</span>
+                      <span
+                        className={`badge ${
+                          lavaajamRecord?.status === "PAID"
+                            ? "bg-success"
+                            : "bg-warning text-dark"
+                        }`}
+                      >
+                        {lavaajamRecord?.status === "PAID" ? "PAID (जमा)" : "PENDING (बाकी)"}
+                      </span>
+                    </div>
+                    <small className="text-muted d-block mt-1">
+                      {lavaajamRecord?.status === "PAID" ? (
+                        <>
+                          Receipt #{lavaajamRecord.receiptNumber || "N/A"} • Receiver: {lavaajamRecord.receiverName || "N/A"}
+                          {lavaajamRecord.amount ? ` • ₹${lavaajamRecord.amount}` : ""}
+                          {lavaajamRecord.paymentDate ? ` • Date: ${new Date(lavaajamRecord.paymentDate).toLocaleDateString()}` : ""}
+                        </>
+                      ) : (
+                        "Annual Sangh Lavaajam has not been recorded as paid yet for this family."
+                      )}
+                    </small>
+                  </div>
+                </div>
+                <Link
+                  href={`/lavaajam?year=2026-2027&search=${encodeURIComponent(family.familyId)}`}
+                  className="btn btn-sm btn-outline-primary fw-medium"
+                >
+                  <i className="bi bi-pencil-square me-1"></i> Open in Lavaajam Register
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -176,6 +249,16 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                       )}
                       {m.status === "ARCHIVED" && (
                         <span className="badge bg-secondary ms-1">Archived</span>
+                      )}
+                      {m.bloodGroup && (
+                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-2 small">
+                          <i className="bi bi-droplet-fill me-1"></i>{m.bloodGroup}
+                        </span>
+                      )}
+                      {m.isBloodDonor && (
+                        <span className="badge bg-danger text-white ms-1 small">
+                          Donor
+                        </span>
                       )}
                       {m.whatsappNumber && (
                         <div className="small text-success fw-normal mt-1">
@@ -256,6 +339,14 @@ export default function FamilyDetailClient({ family, isAdmin }: FamilyDetailClie
                   <h6 className="fw-bold text-dark mb-0 mt-1">
                     {m.name} {m.relationship === "HEAD" && <span className="badge bg-secondary ms-1">Head</span>}
                     {m.status === "ARCHIVED" && <span className="badge bg-secondary ms-1">Archived</span>}
+                    {m.bloodGroup && (
+                      <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 small">
+                        <i className="bi bi-droplet-fill me-1"></i>{m.bloodGroup}
+                      </span>
+                    )}
+                    {m.isBloodDonor && (
+                      <span className="badge bg-danger text-white ms-1 small">Donor</span>
+                    )}
                   </h6>
                   {m.whatsappNumber && (
                     <div className="small text-success mt-1">

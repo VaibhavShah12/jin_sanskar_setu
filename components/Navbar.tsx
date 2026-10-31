@@ -122,6 +122,24 @@ export default function Navbar() {
                   <i className="bi bi-pie-chart-fill me-1"></i> Analytics
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link
+                  href="/seva-directory"
+                  className={`nav-link px-3 fw-medium ${isActive("/seva-directory") ? "active text-primary fw-bold" : ""}`}
+                >
+                  <i className="bi bi-heart-pulse-fill me-1 text-danger"></i> Seva Directory
+                </Link>
+              </li>
+              {(isTrustee || isAdmin) && (
+                <li className="nav-item">
+                  <Link
+                    href="/lavaajam"
+                    className={`nav-link px-3 fw-medium ${isActive("/lavaajam") ? "active text-primary fw-bold" : ""}`}
+                  >
+                    <i className="bi bi-receipt me-1 text-warning-emphasis"></i> Lavaajam
+                  </Link>
+                </li>
+              )}
               {!isTrustee && (
                 <li className="nav-item">
                   <Link
@@ -286,6 +304,22 @@ export default function Navbar() {
               >
                 <i className="bi bi-pie-chart-fill me-2"></i> Community Analytics
               </Link>
+              <Link
+                href="/seva-directory"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`list-group-item list-group-item-action border-0 py-2 ${isActive("/seva-directory") ? "fw-bold text-primary" : ""}`}
+              >
+                <i className="bi bi-heart-pulse-fill me-2 text-danger"></i> Seva Directory (सेवा)
+              </Link>
+              {(isTrustee || isAdmin) && (
+                <Link
+                  href="/lavaajam"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`list-group-item list-group-item-action border-0 py-2 ${isActive("/lavaajam") ? "fw-bold text-primary" : ""}`}
+                >
+                  <i className="bi bi-receipt me-2 text-warning-emphasis"></i> Sangh Lavaajam (लवाजम)
+                </Link>
+              )}
               {canExport && (
                 <Link
                   href="/export"

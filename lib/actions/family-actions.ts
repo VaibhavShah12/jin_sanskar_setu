@@ -111,8 +111,10 @@ export async function createFamilyAction(
             headName: data.headName.trim(),
             mobile: data.mobile.trim(),
             normalizedMobile,
+            email: data.headEmail.trim().toLowerCase(),
             address: data.address.trim(),
             area: data.area.trim(),
+            nativePlace: data.nativePlace?.trim() || null,
             sanghId: data.sanghId,
             status: "ACTIVE",
             createdBy: user.username,
@@ -132,6 +134,9 @@ export async function createFamilyAction(
             age: data.headAge,
             gender: data.headGender,
             relationship: "HEAD",
+            maritalStatus: "MARRIED",
+            bloodGroup: data.headBloodGroup || null,
+            isBloodDonor: Boolean(data.headIsBloodDonor),
             pathshalaStatus: data.headPathshalaStatus,
             preferredDay: data.headPreferredDay,
             preferredTime: data.headPreferredTime,
@@ -170,6 +175,9 @@ export async function createFamilyAction(
               age: m.age,
               gender: m.gender,
               relationship: m.relationship,
+              maritalStatus: m.maritalStatus || "UNMARRIED",
+              bloodGroup: m.bloodGroup || null,
+              isBloodDonor: Boolean(m.isBloodDonor),
               pathshalaStatus: m.pathshalaStatus,
               preferredDay: m.preferredDay,
               preferredTime: m.preferredTime,
@@ -348,5 +356,57 @@ export async function archiveMemberAction(memberDbId: string): Promise<{ success
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || "Failed to archive member." };
+  }
+}
+
+/**
+ * Live check for duplicate mobile number while typing (returns existing family info if found)
+ */
+export async function checkMobileAvailabilityAction(mobile: string): Promise<{
+  exists: boolean;
+  familyId?: string;
+  id?: string;
+  headName?: string;
+  sanghName?: string;
+  sanghPrefix?: string;
+}> {
+  try {
+    const normalized = normalizeMobile(mobile);
+    if (!normalized || normalized.length < 10) {
+      return { exists: false };
+    }
+
+    const existing = await prisma.family.findFirst({
+      where: {
+        normalizedMobile: normalized,
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        familyId: true,
+        headName: true,
+        sangh: {
+          select: {
+            name: true,
+            prefix: true,
+          },
+        },
+      },
+    });
+
+    if (existing) {
+      return {
+        exists: true,
+        familyId: existing.familyId,
+        id: existing.id,
+        headName: existing.headName,
+        sanghName: existing.sangh.name,
+        sanghPrefix: existing.sangh.prefix,
+      };
+    }
+
+    return { exists: false };
+  } catch {
+    return { exists: false };
   }
 }

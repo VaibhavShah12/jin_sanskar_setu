@@ -163,6 +163,8 @@ export const PreferredDayEnum = z.enum(["SATURDAY", "SUNDAY", "WEEKDAY", "NO_PRE
 export const PreferredTimeEnum = z.enum(["MORNING", "AFTERNOON", "EVENING", "NO_PREFERENCE"]);
 export const TransportPreferenceEnum = z.enum(["PICK_AND_DROP", "BY_SELF", "NONE"]).optional().nullable();
 
+export const MaritalStatusEnum = z.enum(["UNMARRIED", "MARRIED", "WIDOWED", "DIVORCED"]);
+
 export const MemberInputSchema = z
   .object({
     id: z.string().optional(),
@@ -171,12 +173,15 @@ export const MemberInputSchema = z
     age: z.coerce.number().int().min(0, "Age cannot be negative").max(120, "Age must be valid"),
     gender: GenderEnum,
     relationship: RelationshipEnum,
+    maritalStatus: MaritalStatusEnum.default("UNMARRIED"),
     pathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     preferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     preferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),
     preferredWeekdays: z.string().optional().nullable(),
     transportPreference: z.string().optional().nullable(),
     whatsappNumber: z.string().optional().nullable(),
+    bloodGroup: z.string().optional().nullable(),
+    isBloodDonor: z.boolean().default(false).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.dateOfBirth && data.dateOfBirth.trim()) {
@@ -203,9 +208,13 @@ export const FamilyFormSchema = z
     headAge: z.coerce.number().int().min(1, "Valid age required").max(120),
     headGender: GenderEnum.default("MALE"),
     mobile: z.string().min(10, "Valid mobile number is required (min 10 digits)").max(15),
+    headEmail: z.string().min(1, "Head email ID is required").email("Please enter a valid email address (e.g. name@example.com)"),
     address: z.string().min(5, "Address must have at least 5 characters").max(300),
     area: z.string().min(2, "Area or locality is required").max(100),
+    nativePlace: z.string().max(100).optional().nullable(),
     sanghId: z.string().min(1, "Please select a Sangh"),
+    headBloodGroup: z.string().optional().nullable(),
+    headIsBloodDonor: z.boolean().default(false).optional(),
     headPathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     headPreferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     headPreferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),
@@ -229,6 +238,31 @@ export const FamilyFormSchema = z
         });
       }
     }
+
+    // Phone deduplication: no two members can share the same WhatsApp number
+    const headNormalized = normalizeMobile(data.mobile);
+    const seenNumbers = new Map<string, number>();
+
+    data.members.forEach((m, idx) => {
+      const mNormalized = m.whatsappNumber ? normalizeMobile(m.whatsappNumber) : "";
+
+      if (mNormalized) {
+        if (mNormalized === headNormalized) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "This phone number is the same as the family head's number. Please use a different number.",
+            path: ["members", idx, "whatsappNumber"],
+          });
+        } else if (seenNumbers.has(mNormalized)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "This phone number is already registered with another family member. A unique number is required.",
+            path: ["members", idx, "whatsappNumber"],
+          });
+        }
+        seenNumbers.set(mNormalized, idx);
+      }
+    });
   });
 
 export type MemberInput = z.infer<typeof MemberInputSchema>;

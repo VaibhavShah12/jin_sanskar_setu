@@ -160,6 +160,43 @@ export default async function AnalyticsPage() {
     families,
   }));
 
+  // 8. Emergency Blood Donors by Blood Group
+  const bloodDonorGroup = await prisma.member.groupBy({
+    by: ["bloodGroup"],
+    where: {
+      status: "ACTIVE",
+      bloodGroup: { not: null },
+      isBloodDonor: true,
+      ...sanghFilter,
+    },
+    _count: { id: true },
+  });
+
+  const bloodDonorsByGroup = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((bg) => ({
+    bloodGroup: bg,
+    count: bloodDonorGroup.find((g) => g.bloodGroup === bg)?._count.id || 0,
+  }));
+
+  // 9. Top Native Places / Mul Gaam
+  const nativePlacesGroup = await prisma.family.groupBy({
+    by: ["nativePlace"],
+    where: {
+      status: "ACTIVE",
+      nativePlace: { not: null },
+      ...sanghFilter,
+    },
+    _count: { id: true },
+    orderBy: { _count: { id: "desc" } },
+    take: 8,
+  });
+
+  const topNativePlaces = nativePlacesGroup
+    .filter((n) => n.nativePlace && n.nativePlace.trim().length > 0)
+    .map((n) => ({
+      place: n.nativePlace as string,
+      count: n._count.id,
+    }));
+
   const analyticsData = {
     membersBySangh,
     familiesBySangh,
@@ -168,6 +205,8 @@ export default async function AnalyticsPage() {
     membersByArea,
     registrationsOverTime,
     childrenBySangh,
+    bloodDonorsByGroup,
+    topNativePlaces,
   };
 
   return (

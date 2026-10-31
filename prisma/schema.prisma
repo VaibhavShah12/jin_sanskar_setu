@@ -111,6 +111,25 @@ enum SubmissionStatus {
   REJECTED
 }
 
+enum MaritalStatus {
+  UNMARRIED
+  MARRIED
+  WIDOWED
+  DIVORCED
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CHEQUE
+  BANK_TRANSFER
+}
+
+enum TransportPreference {
+  PICK_AND_DROP
+  BY_SELF
+}
+
 // ------------------------------------------------------------------------------
 // USERS
 // Only pre-authorized users added by an administrator may access the application.
@@ -161,6 +180,7 @@ model Sangh {
   accessRequests MemberAccessRequest[]
   birthdayMessages BirthdayMessageLog[]
   memberFormSubmissions MemberFormSubmission[]
+  lavaajamRecords LavaajamRecord[]
 
   @@index([prefix])
   @@map("sanghs")
@@ -178,8 +198,10 @@ model Family {
   headName         String
   mobile           String
   normalizedMobile String       // Stripped of spaces, hyphens, prefixes
+  email            String?      // Family Head contact email
   address          String
   area             String
+  nativePlace      String?      // Native Village / Mul Gaam (मूल वतन / મૂળ ગામ)
   sanghId          String
   sangh            Sangh        @relation(fields: [sanghId], references: [id], onDelete: Restrict)
   status           RecordStatus @default(ACTIVE)
@@ -193,6 +215,7 @@ model Family {
   questionnaireResponses QuestionnaireResponse[]
   birthdayMessages       BirthdayMessageLog[]
   memberFormSubmissions  MemberFormSubmission[]
+  lavaajamRecords        LavaajamRecord[]
 
   @@index([familyId])
   @@index([normalizedMobile])
@@ -229,6 +252,12 @@ model Member {
   transportPreference String?         // PICK_AND_DROP, BY_SELF
   noInterestReason    String?         // Comment/reason if pathshalaInterest is NO
   status            RecordStatus      @default(ACTIVE)
+  maritalStatus     MaritalStatus     @default(UNMARRIED)
+  isDeceased        Boolean           @default(false)    // Soft-delete for deceased members
+  occupation        String?                              // e.g. Doctor, Engineer, Business
+  educationLevel    String?                              // e.g. Graduate, Post-Graduate, School
+  bloodGroup        String?                              // e.g. A+, B+, O+, AB+, etc.
+  isBloodDonor      Boolean           @default(false)    // Emergency community blood donor opt-in
   interests         String[]          @default([])
   whatsappNumber    String?           // Individual WhatsApp contact number
   whatsappConsent          Boolean    @default(false)
@@ -300,14 +329,17 @@ model AuditLog {
   action      String   // FAMILY_CREATED, FAMILY_ARCHIVED, MEMBER_CREATED, etc.
   entityType  String   // Family, Member, User, Sync, Export
   entityId    String
+  sanghId     String?  // Scope audit entries per Sangh for Trustee-level visibility
   performedBy String   // User email or ID
   performedAt DateTime @default(now())
   metadata    Json?    // Contextual payload
 
   @@index([action])
   @@index([entityType, entityId])
+  @@index([entityType, entityId, performedAt])
   @@index([performedBy])
   @@index([performedAt])
+  @@index([sanghId])
   @@map("audit_logs")
 }
 
@@ -509,19 +541,23 @@ model MemberFormSubmission {
 // ------------------------------------------------------------------------------
 
 model OtpVerification {
-  id           String   @id @default(cuid())
-  mobile       String   // Normalized mobile (10 digits)
-  codeHash     String   // Hashed 6-digit OTP
-  sessionToken String   @unique // Cryptographic random token for verified form session
-  familyId     String?  // Matched family ID
-  attempts     Int      @default(0)
-  verified     Boolean  @default(false)
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  mobile        String    // Normalized mobile (10 digits)
+  codeHash      String    // Hashed 6-digit OTP
+  sessionToken  String    @unique // Cryptographic random token for verified form session
+  familyId      String?   // Matched family ID
+  attempts      Int       @default(0)
+  verified      Boolean   @default(false)
+  expiresAt     DateTime
+  lastAttemptAt DateTime? // Timestamp of most recent OTP attempt (for rate-limit tracking)
+  blockedUntil  DateTime? // If set, mobile is blocked from new OTP requests until this time
+  ipAddress     String?   // Requester IP for abuse detection
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([mobile])
   @@index([sessionToken])
+  @@index([mobile, blockedUntil])
   @@map("otp_verifications")
 }
 
@@ -536,6 +572,45 @@ model SubmissionCounter {
   updatedAt  DateTime @updatedAt
 
   @@map("submission_counters")
+}
+
+// ------------------------------------------------------------------------------
+// SANGH LAVAAJAM (वार्षिक संघ लवाजम / सदस्यता शुल्क)
+// Strictly scoped to Trustees and Admins of their respective Sangh.
+// ------------------------------------------------------------------------------
+
+enum LavaajamStatus {
+  PAID
+  PENDING
+}
+
+model LavaajamRecord {
+  id            String         @id @default(cuid())
+  familyId      String
+  family        Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  sanghId       String
+  sangh         Sangh          @relation(fields: [sanghId], references: [id], onDelete: Restrict)
+  year          String         // e.g. "2026-2027"
+  status        LavaajamStatus @default(PENDING)
+  amount        Float?         // Amount collected (₹)
+  receiptNumber String?        // Receipt No. e.g. "REC-2026-0042"
+  receiverName  String?        // Name of person who collected/received payment
+  receiptPhotoUrl String?      // Uploaded receipt photo URL (store file URL, not Base64)
+  paymentDate   DateTime?      // Date payment was received
+  paymentMode   PaymentMode?   // Enum: CASH, UPI, CHEQUE, BANK_TRANSFER
+  notes         String?        // Optional remarks
+  recordedBy    String?        // Username of Trustee/Admin who recorded payment
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([familyId, year])
+  @@index([familyId])
+  @@index([sanghId])
+  @@index([year])
+  @@index([status])
+  @@index([sanghId, year])
+  @@index([sanghId, year, status])
+  @@map("lavaajam_records")
 }
 
 

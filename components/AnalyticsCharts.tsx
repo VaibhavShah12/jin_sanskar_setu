@@ -26,6 +26,8 @@ interface AnalyticsData {
   membersByArea: { area: string; count: number }[];
   registrationsOverTime: { date: string; families: number }[];
   childrenBySangh: { name: string; prefix: string; count: number; sanghId: string }[];
+  bloodDonorsByGroup?: { bloodGroup: string; count: number }[];
+  topNativePlaces?: { place: string; count: number }[];
 }
 
 const COLORS = [
@@ -306,6 +308,79 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsData }) {
           </div>
         </div>
       </div>
+
+      {/* 9. Emergency Blood Donors by Group */}
+      {data.bloodDonorsByGroup && (
+        <div className="col-12 col-lg-6">
+          <div className="card-clean p-3 p-md-4 h-100">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <h5 className="fw-bold text-dark mb-0">
+                <i className="bi bi-droplet-fill text-danger me-2"></i>
+                9. Emergency Blood Donors
+              </h5>
+              <span className="badge bg-danger-subtle text-danger">Ready Donors</span>
+            </div>
+            <div style={{ width: "100%", height: 300 }}>
+              <ResponsiveContainer>
+                <BarChart
+                  data={data.bloodDonorsByGroup}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="bloodGroup" interval={0} fontSize={12} />
+                  <YAxis allowDecimals={false} fontSize={12} />
+                  <Tooltip
+                    formatter={(val: number) => [`${val} Donors`, "Count"]}
+                    labelFormatter={(lbl) => `Blood Group: ${lbl}`}
+                  />
+                  <Bar
+                    dataKey="count"
+                    fill="#dc2626"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Top Native Places / Mul Gaam */}
+      {data.topNativePlaces && data.topNativePlaces.length > 0 && (
+        <div className="col-12 col-lg-6">
+          <div className="card-clean p-3 p-md-4 h-100">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <h5 className="fw-bold text-dark mb-0">
+                <i className="bi bi-house-door-fill text-primary me-2"></i>
+                10. Top Native Places (મૂળ ગામ)
+              </h5>
+              <small className="text-muted">Ancestral Hometowns</small>
+            </div>
+            <div style={{ width: "100%", height: 300 }}>
+              <ResponsiveContainer>
+                <BarChart
+                  data={data.topNativePlaces}
+                  layout="vertical"
+                  margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} fontSize={12} />
+                  <YAxis dataKey="place" type="category" width={85} fontSize={12} />
+                  <Tooltip
+                    formatter={(val: number) => [`${val} Families`, "Families"]}
+                    labelFormatter={(lbl) => `Native Place: ${lbl}`}
+                  />
+                  <Bar
+                    dataKey="count"
+                    fill="#0f766e"
+                    radius={[0, 4, 4, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
