@@ -508,6 +508,9 @@ model MemberFormSubmission {
   addressChanged     Boolean          @default(false) // Q2
   newAddress         String?
   newArea            String?
+  newNativePlace     String?          // Updated Native Village / Mul Gaam
+  newOccupation      String?          // Updated Occupation
+  newMobile          String?          // Updated Mobile Number
   memberCount        Int              // Q3
   membersUpToDate    Boolean          @default(true) // Q4
   correctionNeeded   Boolean          @default(false) // Q5

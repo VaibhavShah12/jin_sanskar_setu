@@ -140,6 +140,22 @@ export default function Navbar() {
                   </Link>
                 </li>
               )}
+              <li className="nav-item">
+                <Link
+                  href="/directory"
+                  className={`nav-link px-3 fw-medium ${isActive("/directory") ? "active text-primary fw-bold" : ""}`}
+                >
+                  <i className="bi bi-book-half me-1"></i> Directory
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/corrections"
+                  className={`nav-link px-3 fw-medium ${isActive("/corrections") ? "active text-primary fw-bold" : ""}`}
+                >
+                  <i className="bi bi-pencil-square me-1 text-warning-emphasis"></i> Corrections
+                </Link>
+              </li>
               {!isTrustee && (
                 <li className="nav-item">
                   <Link
@@ -320,6 +336,20 @@ export default function Navbar() {
                   <i className="bi bi-receipt me-2 text-warning-emphasis"></i> Sangh Lavaajam (लवाजम)
                 </Link>
               )}
+              <Link
+                href="/directory"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`list-group-item list-group-item-action border-0 py-2 ${isActive("/directory") ? "fw-bold text-primary" : ""}`}
+              >
+                <i className="bi bi-book-half me-2 text-primary"></i> Sangh Directory (पुस्तिका)
+              </Link>
+              <Link
+                href="/corrections"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`list-group-item list-group-item-action border-0 py-2 ${isActive("/corrections") ? "fw-bold text-primary" : ""}`}
+              >
+                <i className="bi bi-pencil-square me-2 text-warning-emphasis"></i> Correction Requests
+              </Link>
               {canExport && (
                 <Link
                   href="/export"

@@ -10,6 +10,7 @@ import {
   VerifyOtpResult,
 } from "@/lib/otp/otp-service";
 import { Prisma } from "@prisma/client";
+import { normalizeMobile } from "@/lib/validation/family";
 
 export interface MemberFormSubmissionInput {
   sessionToken: string;
@@ -234,6 +235,7 @@ export async function approveSubmissionAction(submissionId: string) {
       }
 
       const appliedChanges: Record<string, any> = {};
+      const familyUpdates: Record<string, any> = { updatedBy: user.username };
 
       if (submission.addressChanged && submission.newAddress && submission.newArea) {
         appliedChanges.address = {
@@ -244,6 +246,45 @@ export async function approveSubmissionAction(submissionId: string) {
           before: submission.family.area,
           after: submission.newArea,
         };
+        familyUpdates.address = submission.newAddress;
+        familyUpdates.area = submission.newArea;
+      }
+
+      if (submission.newNativePlace && submission.newNativePlace.trim()) {
+        appliedChanges.nativePlace = {
+          before: submission.family.nativePlace,
+          after: submission.newNativePlace.trim(),
+        };
+        familyUpdates.nativePlace = submission.newNativePlace.trim();
+      }
+
+      if (submission.newMobile && submission.newMobile.trim()) {
+        const cleanMobile = normalizeMobile(submission.newMobile.trim());
+        appliedChanges.mobile = {
+          before: submission.family.mobile,
+          after: submission.newMobile.trim(),
+        };
+        familyUpdates.mobile = submission.newMobile.trim();
+        familyUpdates.normalizedMobile = cleanMobile;
+      }
+
+      if (submission.newOccupation && submission.newOccupation.trim() && submission.family.headMemberId) {
+        const headMember = await tx.member.findUnique({
+          where: { id: submission.family.headMemberId },
+        });
+        if (headMember) {
+          appliedChanges.occupation = {
+            before: headMember.occupation,
+            after: submission.newOccupation.trim(),
+          };
+          await tx.member.update({
+            where: { id: headMember.id },
+            data: {
+              occupation: submission.newOccupation.trim(),
+              updatedBy: user.username,
+            },
+          });
+        }
       }
 
       // 2. Atomic transition to APPROVED (conditional update strictly where status is PENDING)
@@ -264,15 +305,11 @@ export async function approveSubmissionAction(submissionId: string) {
         throw new Error("ALREADY_PROCESSED: This submission has already been reviewed by another volunteer.");
       }
 
-      // 3. If residential address changed, apply safe update to Family record
-      if (submission.addressChanged && submission.newAddress && submission.newArea) {
+      // 3. Apply changes to Family record if any field was updated
+      if (Object.keys(familyUpdates).length > 1) {
         await tx.family.update({
           where: { id: submission.familyId },
-          data: {
-            address: submission.newAddress,
-            area: submission.newArea,
-            updatedBy: user.username,
-          },
+          data: familyUpdates,
         });
       }
 
@@ -390,4 +427,148 @@ export async function rejectSubmissionAction(submissionId: string, reason: strin
       error: error?.message || "Failed to reject submission.",
     };
   }
+}
+
+export interface CorrectionRequestInput {
+  familyId: string;
+  newAddress?: string;
+  newArea?: string;
+  newNativePlace?: string;
+  newOccupation?: string;
+  newMobile?: string;
+  correctionDetails?: string;
+  additionalNotes?: string;
+}
+
+/**
+ * Submits a new correction request for an existing family
+ */
+export async function submitCorrectionRequestAction(input: CorrectionRequestInput) {
+  try {
+    const family = await prisma.family.findUnique({
+      where: { id: input.familyId },
+      include: { sangh: true, members: { where: { status: "ACTIVE" } } },
+    });
+
+    if (!family) {
+      return { success: false, error: "Family record not found." };
+    }
+
+    const counter = await prisma.submissionCounter.upsert({
+      where: { id: "GLOBAL_SUBMISSION_COUNTER" },
+      create: { id: "GLOBAL_SUBMISSION_COUNTER", lastNumber: 1 },
+      update: { lastNumber: { increment: 1 } },
+    });
+
+    const currentYear = new Date().getFullYear();
+    const paddedNum = String(counter.lastNumber).padStart(4, "0");
+    const submissionNumber = `REQ-${currentYear}-${paddedNum}`;
+
+    const submission = await prisma.memberFormSubmission.create({
+      data: {
+        submissionNumber,
+        familyId: family.id,
+        headMemberId: family.headMemberId,
+        sanghId: family.sanghId,
+        submittedMobile: input.newMobile?.trim() || family.mobile,
+        submittedHeadName: family.headName,
+        headInfoCorrect: !Boolean(input.newMobile || input.newOccupation),
+        addressChanged: Boolean(input.newAddress && input.newAddress.trim() !== family.address),
+        newAddress: input.newAddress?.trim() || null,
+        newArea: input.newArea?.trim() || null,
+        newNativePlace: input.newNativePlace?.trim() || null,
+        newOccupation: input.newOccupation?.trim() || null,
+        newMobile: input.newMobile?.trim() || null,
+        memberCount: family.members.length,
+        membersUpToDate: true,
+        correctionNeeded: true,
+        correctionDetails: input.correctionDetails?.trim() || null,
+        additionalNotes: input.additionalNotes?.trim() || null,
+        status: "PENDING",
+      },
+    });
+
+    await logAuditEvent({
+      action: "MEMBER_CORRECTION_REQUESTED",
+      entityType: "Family",
+      entityId: family.id,
+      performedBy: "PORTAL_USER",
+      metadata: {
+        submissionNumber,
+        familyId: family.familyId,
+        headName: family.headName,
+        sangh: family.sangh.name,
+      },
+    });
+
+    return {
+      success: true,
+      submissionNumber,
+      submissionId: submission.id,
+    };
+  } catch (error: any) {
+    console.error("[MEMBER_FORM] submitCorrectionRequestAction error:", error);
+    return {
+      success: false,
+      error: error?.message || "Failed to submit correction request.",
+    };
+  }
+}
+
+/**
+ * Fetches all correction requests and member form submissions
+ */
+export async function getCorrectionRequestsAction(statusFilter?: "ALL" | "PENDING" | "APPROVED" | "REJECTED") {
+  const user = await requireAuth();
+  const sanghFilter = getSanghAccessFilter(user);
+
+  const submissions = await prisma.memberFormSubmission.findMany({
+    where: {
+      ...sanghFilter,
+      ...(statusFilter && statusFilter !== "ALL" ? { status: statusFilter } : {}),
+    },
+    include: {
+      family: {
+        include: {
+          sangh: true,
+          members: { where: { status: "ACTIVE" } },
+        },
+      },
+      sangh: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return submissions.map((s) => ({
+    id: s.id,
+    submissionNumber: s.submissionNumber,
+    familyId: s.familyId,
+    familyRefId: s.family.familyId,
+    headName: s.submittedHeadName,
+    maskedMobile: s.submittedMobile.length > 5 ? `${s.submittedMobile.slice(0, 3)}****${s.submittedMobile.slice(-3)}` : s.submittedMobile,
+    currentAddress: s.family.address,
+    currentArea: s.family.area,
+    currentNativePlace: s.family.nativePlace || "—",
+    currentMemberCount: s.family.members.length,
+    sanghName: s.sangh.name,
+    sanghPrefix: s.sangh.prefix,
+    headInfoCorrect: s.headInfoCorrect,
+    addressChanged: s.addressChanged,
+    newAddress: s.newAddress,
+    newArea: s.newArea,
+    newNativePlace: s.newNativePlace,
+    newOccupation: s.newOccupation,
+    newMobile: s.newMobile,
+    memberCount: s.memberCount,
+    membersUpToDate: s.membersUpToDate,
+    correctionNeeded: s.correctionNeeded,
+    correctionDetails: s.correctionDetails,
+    additionalNotes: s.additionalNotes,
+    status: s.status,
+    reviewedBy: s.reviewedBy,
+    reviewedAt: s.reviewedAt ? s.reviewedAt.toISOString() : null,
+    rejectionReason: s.rejectionReason,
+    appliedChanges: s.appliedChanges,
+    createdAt: s.createdAt.toISOString(),
+  }));
 }

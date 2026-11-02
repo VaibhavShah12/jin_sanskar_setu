@@ -6,6 +6,7 @@ import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import { archiveFamilyAction, archiveMemberAction } from "@/lib/actions/family-actions";
+import { submitCorrectionRequestAction } from "@/lib/actions/member-form-actions";
 import { getMemberCalculatedAge } from "@/lib/validation/family";
 import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 
@@ -29,6 +30,21 @@ export default function FamilyDetailClient({
   const [memberToArchive, setMemberToArchive] = useState<any | null>(null);
   const [archivingMember, setArchivingMember] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Correction Request State
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
+  const [correctionSuccess, setCorrectionSuccess] = useState<string | null>(null);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
+  const [correctionForm, setCorrectionForm] = useState({
+    newAddress: family.address || "",
+    newArea: family.area || "",
+    newNativePlace: family.nativePlace || "",
+    newOccupation: "",
+    newMobile: "",
+    correctionDetails: "",
+    additionalNotes: "",
+  });
 
   // Archive Family (ADMIN ONLY)
   const handleArchive = async () => {
@@ -98,17 +114,28 @@ export default function FamilyDetailClient({
             </small>
           </div>
 
-          {/* Archive Family Button: STRICTLY ADMIN ONLY */}
-          {isAdmin && family.status === "ACTIVE" && (
-            <div className="d-flex gap-2">
+          {/* Action Buttons */}
+          <div className="d-flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setShowCorrectionModal(true);
+                setCorrectionSuccess(null);
+                setCorrectionError(null);
+              }}
+              className="btn btn-outline-warning btn-sm px-3 text-dark fw-semibold shadow-sm"
+              title="Submit a profile update or correction request"
+            >
+              <i className="bi bi-pencil-square me-1 text-warning-emphasis"></i> Request Correction
+            </button>
+            {isAdmin && family.status === "ACTIVE" && (
               <button
                 onClick={() => setShowArchiveModal(true)}
-                className="btn btn-outline-danger btn-sm px-3"
+                className="btn btn-outline-danger btn-sm px-3 shadow-sm"
               >
                 <i className="bi bi-archive me-1"></i> Archive Family
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="row g-3">
@@ -420,6 +447,172 @@ export default function FamilyDetailClient({
         onConfirm={handleArchiveMember}
         onCancel={() => setMemberToArchive(null)}
       />
+
+      {/* Profile Correction Request Modal */}
+      {showCorrectionModal && (
+        <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content border-0 shadow">
+              <div className="modal-header bg-warning bg-opacity-25 border-bottom">
+                <h5 className="modal-title fs-6 fw-bold text-dark">
+                  <i className="bi bi-pencil-square text-warning-emphasis me-2"></i>
+                  Request Profile Correction (विवरण सुधार अनुरोध)
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setShowCorrectionModal(false)}></button>
+              </div>
+
+              {correctionSuccess ? (
+                <div className="modal-body p-4 text-center">
+                  <div className="display-4 text-success mb-3">
+                    <i className="bi bi-check-circle-fill"></i>
+                  </div>
+                  <h5 className="fw-bold text-dark">Correction Request Submitted!</h5>
+                  <p className="text-muted small mb-3">
+                    Your request has been recorded under reference number:
+                  </p>
+                  <div className="alert alert-success d-inline-block font-monospace fw-bold fs-5 px-4 py-2 mb-3">
+                    {correctionSuccess}
+                  </div>
+                  <p className="text-muted small">
+                    Sangh Trustees will review and approve the requested updates. Once verified, the database will be automatically synced.
+                  </p>
+                  <button type="button" className="btn btn-primary btn-sm px-4" onClick={() => setShowCorrectionModal(false)}>
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setSubmittingCorrection(true);
+                    setCorrectionError(null);
+                    try {
+                      const res = await submitCorrectionRequestAction({
+                        familyId: family.id,
+                        newAddress: correctionForm.newAddress,
+                        newArea: correctionForm.newArea,
+                        newNativePlace: correctionForm.newNativePlace,
+                        newOccupation: correctionForm.newOccupation,
+                        newMobile: correctionForm.newMobile,
+                        correctionDetails: correctionForm.correctionDetails,
+                        additionalNotes: correctionForm.additionalNotes,
+                      });
+                      if (!res.success) {
+                        setCorrectionError(res.error || "Failed to submit request.");
+                      } else {
+                        setCorrectionSuccess(res.submissionNumber || "REQ-SUBMITTED");
+                      }
+                    } catch (err: any) {
+                      setCorrectionError(err?.message || "An unexpected error occurred.");
+                    } finally {
+                      setSubmittingCorrection(false);
+                    }
+                  }}
+                >
+                  <div className="modal-body p-4">
+                    {correctionError && (
+                      <div className="alert alert-danger small mb-3">
+                        <i className="bi bi-exclamation-triangle-fill me-1"></i> {correctionError}
+                      </div>
+                    )}
+                    <p className="text-muted small mb-3">
+                      Enter any fields that need updating for family <strong>{family.headName}</strong> ({family.familyId}). Unchanged fields can be left as-is.
+                    </p>
+
+                    <div className="row g-3">
+                      <div className="col-12 col-md-8">
+                        <label className="form-label small fw-semibold text-dark">Residential Address</label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={correctionForm.newAddress}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, newAddress: e.target.value })}
+                          placeholder="Full flat / building / street address"
+                        />
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <label className="form-label small fw-semibold text-dark">Area / Locality</label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={correctionForm.newArea}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, newArea: e.target.value })}
+                          placeholder="e.g. Bibvewadi, Salisbury Park"
+                        />
+                      </div>
+                      <div className="col-12 col-md-6">
+                        <label className="form-label small fw-semibold text-dark">Native Village / Mul Gaam (મૂળ ગામ)</label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={correctionForm.newNativePlace}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, newNativePlace: e.target.value })}
+                          placeholder="e.g. Patan, Palanpur, Sirohi"
+                        />
+                      </div>
+                      <div className="col-12 col-md-6">
+                        <label className="form-label small fw-semibold text-dark">Primary Mobile (if changed)</label>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          className="form-control form-control-sm"
+                          value={correctionForm.newMobile}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, newMobile: e.target.value })}
+                          placeholder="e.g. 9822012345 (Leave blank if same)"
+                        />
+                      </div>
+                      <div className="col-12 col-md-6">
+                        <label className="form-label small fw-semibold text-dark">Head Occupation</label>
+                        <select
+                          className="form-select form-select-sm"
+                          value={correctionForm.newOccupation}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, newOccupation: e.target.value })}
+                        >
+                          <option value="">-- Keep Current / Not Changed --</option>
+                          <option value="SERVICE">Service (Job)</option>
+                          <option value="BUSINESS">Business</option>
+                          <option value="RETIRED">Retired</option>
+                          <option value="HOUSEWIFE">Housewife</option>
+                          <option value="STUDENT">Student</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </div>
+                      <div className="col-12">
+                        <label className="form-label small fw-semibold text-dark">Family Member Corrections or Additions</label>
+                        <textarea
+                          className="form-control form-control-sm"
+                          rows={3}
+                          value={correctionForm.correctionDetails}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, correctionDetails: e.target.value })}
+                          placeholder="e.g. Please add newborn daughter Jiya born on 15/08/2026 / Update son's age to 14"
+                        ></textarea>
+                      </div>
+                      <div className="col-12">
+                        <label className="form-label small fw-semibold text-dark">Additional Remarks / Message to Sangh</label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={correctionForm.additionalNotes}
+                          onChange={(e) => setCorrectionForm({ ...correctionForm, additionalNotes: e.target.value })}
+                          placeholder="Optional notes or convenient time to call"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowCorrectionModal(false)}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-warning btn-sm px-4 fw-semibold text-dark shadow-sm" disabled={submittingCorrection}>
+                      {submittingCorrection ? "Submitting..." : "Submit Correction Request"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
