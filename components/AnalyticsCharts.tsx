@@ -26,7 +26,7 @@ interface AnalyticsData {
   membersByArea: { area: string; count: number }[];
   registrationsOverTime: { date: string; families: number }[];
   childrenBySangh: { name: string; prefix: string; count: number; sanghId: string }[];
-  bloodDonorsByGroup?: { bloodGroup: string; count: number }[];
+  occupationsDistribution?: { occupation: string; count: number }[];
   topNativePlaces?: { place: string; count: number }[];
 }
 
@@ -309,33 +309,33 @@ export default function AnalyticsCharts({ data }: { data: AnalyticsData }) {
         </div>
       </div>
 
-      {/* 9. Emergency Blood Donors by Group */}
-      {data.bloodDonorsByGroup && (
+      {/* 9. Members by Occupation */}
+      {data.occupationsDistribution && (
         <div className="col-12 col-lg-6">
           <div className="card-clean p-3 p-md-4 h-100">
             <div className="d-flex justify-content-between align-items-center mb-3">
               <h5 className="fw-bold text-dark mb-0">
-                <i className="bi bi-droplet-fill text-danger me-2"></i>
-                9. Emergency Blood Donors
+                <i className="bi bi-briefcase-fill text-primary me-2"></i>
+                9. Members by Occupation
               </h5>
-              <span className="badge bg-danger-subtle text-danger">Ready Donors</span>
+              <span className="badge bg-primary-subtle text-primary">Demographics</span>
             </div>
             <div style={{ width: "100%", height: 300 }}>
               <ResponsiveContainer>
                 <BarChart
-                  data={data.bloodDonorsByGroup}
+                  data={data.occupationsDistribution}
                   margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="bloodGroup" interval={0} fontSize={12} />
+                  <XAxis dataKey="occupation" interval={0} fontSize={12} />
                   <YAxis allowDecimals={false} fontSize={12} />
                   <Tooltip
-                    formatter={(val: number) => [`${val} Donors`, "Count"]}
-                    labelFormatter={(lbl) => `Blood Group: ${lbl}`}
+                    formatter={(val: number) => [`${val} Members`, "Count"]}
+                    labelFormatter={(lbl) => `Occupation: ${lbl}`}
                   />
                   <Bar
                     dataKey="count"
-                    fill="#dc2626"
+                    fill="#4f46e5"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>

@@ -254,10 +254,8 @@ model Member {
   status            RecordStatus      @default(ACTIVE)
   maritalStatus     MaritalStatus     @default(UNMARRIED)
   isDeceased        Boolean           @default(false)    // Soft-delete for deceased members
-  occupation        String?                              // e.g. Doctor, Engineer, Business
+  occupation        String?                              // e.g. Service, Business, Retired, Housewife, Student
   educationLevel    String?                              // e.g. Graduate, Post-Graduate, School
-  bloodGroup        String?                              // e.g. A+, B+, O+, AB+, etc.
-  isBloodDonor      Boolean           @default(false)    // Emergency community blood donor opt-in
   interests         String[]          @default([])
   whatsappNumber    String?           // Individual WhatsApp contact number
   whatsappConsent          Boolean    @default(false)

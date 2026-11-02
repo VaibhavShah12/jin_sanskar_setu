@@ -250,14 +250,9 @@ export default function FamilyDetailClient({
                       {m.status === "ARCHIVED" && (
                         <span className="badge bg-secondary ms-1">Archived</span>
                       )}
-                      {m.bloodGroup && (
-                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-2 small">
-                          <i className="bi bi-droplet-fill me-1"></i>{m.bloodGroup}
-                        </span>
-                      )}
-                      {m.isBloodDonor && (
-                        <span className="badge bg-danger text-white ms-1 small">
-                          Donor
+                      {m.occupation && (
+                        <span className="badge bg-secondary-subtle text-secondary border ms-2 small">
+                          <i className="bi bi-briefcase me-1"></i>{m.occupation}
                         </span>
                       )}
                       {m.whatsappNumber && (
@@ -339,13 +334,10 @@ export default function FamilyDetailClient({
                   <h6 className="fw-bold text-dark mb-0 mt-1">
                     {m.name} {m.relationship === "HEAD" && <span className="badge bg-secondary ms-1">Head</span>}
                     {m.status === "ARCHIVED" && <span className="badge bg-secondary ms-1">Archived</span>}
-                    {m.bloodGroup && (
-                      <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 small">
-                        <i className="bi bi-droplet-fill me-1"></i>{m.bloodGroup}
+                    {m.occupation && (
+                      <span className="badge bg-secondary-subtle text-secondary border ms-1 small">
+                        <i className="bi bi-briefcase me-1"></i>{m.occupation}
                       </span>
-                    )}
-                    {m.isBloodDonor && (
-                      <span className="badge bg-danger text-white ms-1 small">Donor</span>
                     )}
                   </h6>
                   {m.whatsappNumber && (

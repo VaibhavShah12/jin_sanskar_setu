@@ -38,10 +38,14 @@ export const FORM_TRANSLATIONS = {
     nativePlace: "Native Village / Mul Gaam (મૂળ ગામ / मूल वतन)",
     nativePlacePlaceholder: "e.g. Patan, Palanpur, Sirohi, Kutch, Jamnagar",
     nativePlaceHint: "Ancestral hometown for community directory & associations.",
-    bloodGroup: "Blood Group",
-    selectBloodGroup: "Select Blood Group (Optional)",
-    emergencyDonor: "Willing to donate blood in emergency",
-    bloodDonorCheckbox: "Emergency Blood Donor",
+    occupation: "Occupation",
+    selectOccupation: "Select Occupation",
+    occService: "Service (Job)",
+    occBusiness: "Business",
+    occRetired: "Retired",
+    occHousewife: "Housewife",
+    occStudent: "Student",
+    occOther: "Other",
     relationship: "Relationship",
     addMemberBtn: "Add Another Member",
     next: "Continue",
@@ -76,10 +80,14 @@ export const FORM_TRANSLATIONS = {
     nativePlace: "मूल वतन / गाँव (મૂળ ગામ)",
     nativePlacePlaceholder: "उदा. पाटन, पालनपुर, सिरोही, कच्छ, जामनगर",
     nativePlaceHint: "सामुदायिक निर्देशिका और वतन संगठन के लिए पैतृक गाँव।",
-    bloodGroup: "रक्त समूह (Blood Group)",
-    selectBloodGroup: "रक्त समूह चुनें (वैकल्पिक)",
-    emergencyDonor: "आपातकाल में रक्तदान करने हेतु सहमत",
-    bloodDonorCheckbox: "आपातकालीन रक्तदाता",
+    occupation: "व्यवसाय / पेशा (Occupation)",
+    selectOccupation: "व्यवसाय चुनें",
+    occService: "नौकरी (Service)",
+    occBusiness: "व्यापार / धंधा (Business)",
+    occRetired: "सेवानिवृत्त (Retired)",
+    occHousewife: "गृहिणी (Housewife)",
+    occStudent: "विद्यार्थी (Student)",
+    occOther: "अन्य (Other)",
     relationship: "प्रमुख से संबंध",
     addMemberBtn: "अन्य सदस्य जोड़ें",
     next: "आगे बढ़ें",
@@ -114,10 +122,14 @@ export const FORM_TRANSLATIONS = {
     nativePlace: "મૂળ ગામ / વતન",
     nativePlacePlaceholder: "દા.ત. પાટણ, પાલનપુર, સિરોહી, કચ્છ, જામનગર",
     nativePlaceHint: "સમાજ ડિરેક્ટરી અને વતન મંડળ માટે મૂળ વતન.",
-    bloodGroup: "બ્લડ ગ્રુપ (રક્ત જૂથ)",
-    selectBloodGroup: "બ્લડ ગ્રુપ પસંદ કરો (મરજિયાત)",
-    emergencyDonor: "ઇમરજન્સીમાં રક્તદાન કરવા તૈયાર છો",
-    bloodDonorCheckbox: "ઇમરજન્સી રક્તદાતા",
+    occupation: "વ્યવસાય / કામકાજ (Occupation)",
+    selectOccupation: "વ્યવસાય પસંદ કરો",
+    occService: "નોકરી (Service)",
+    occBusiness: "વેપાર / ધંધો (Business)",
+    occRetired: "નિવૃત્ત (Retired)",
+    occHousewife: "ગૃહિણી (Housewife)",
+    occStudent: "વિદ્યાર્થી (Student)",
+    occOther: "અન્ય (Other)",
     relationship: "સંબંધ",
     addMemberBtn: "બીજા સભ્ય ઉમેરો",
     next: "આગળ વધો",
@@ -128,6 +140,19 @@ export const FORM_TRANSLATIONS = {
     mobileDuplicate: "આ મોબાઇલ નંબર પહેલેથી આ કુટુંબ હેઠળ નોંધાયેલ છે:",
   },
 };
+
+export function getOccupationLabel(val: string | null | undefined, t: any) {
+  if (!val) return "—";
+  switch (val) {
+    case "SERVICE": return t.occService || "Service";
+    case "BUSINESS": return t.occBusiness || "Business";
+    case "RETIRED": return t.occRetired || "Retired";
+    case "HOUSEWIFE": return t.occHousewife || "Housewife";
+    case "STUDENT": return t.occStudent || "Student";
+    case "OTHER": return t.occOther || "Other";
+    default: return val;
+  }
+}
 
 interface SanghOption {
   id: string;
@@ -179,8 +204,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
     area: "",
     nativePlace: "",
     sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
-    headBloodGroup: "",
-    headIsBloodDonor: false,
+    headOccupation: "",
     headPathshalaStatus: "UNKNOWN",
     headPreferredDay: "NO_PREFERENCE",
     headPreferredTime: "NO_PREFERENCE",
@@ -241,8 +265,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
           preferredWeekdays: "",
           transportPreference: null,
           whatsappNumber: "",
-          bloodGroup: "",
-          isBloodDonor: false,
+          occupation: "",
         },
       ],
     }));
@@ -846,47 +869,27 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
               <div className="form-text">{t.nativePlaceHint}</div>
             </div>
 
-            {/* Head Blood Group & Emergency Donor */}
+            {/* Head Occupation */}
             <div className="col-12 col-md-6">
-              <div className="row g-2">
-                <div className="col-7">
-                  <label htmlFor="head-blood-group" className="form-label fw-semibold text-dark">
-                    <i className="bi bi-droplet-fill text-danger me-1"></i>
-                    {t.bloodGroup}
-                  </label>
-                  <select
-                    id="head-blood-group"
-                    className="form-select"
-                    value={formData.headBloodGroup || ""}
-                    onChange={(e) => setFormData({ ...formData, headBloodGroup: e.target.value })}
-                  >
-                    <option value="">{t.selectBloodGroup}</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                </div>
-                <div className="col-5 d-flex align-items-end pb-2">
-                  <div className="form-check">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      id="head-blood-donor"
-                      checked={Boolean(formData.headIsBloodDonor)}
-                      onChange={(e) => setFormData({ ...formData, headIsBloodDonor: e.target.checked })}
-                    />
-                    <label className="form-check-label small fw-semibold text-danger" htmlFor="head-blood-donor" style={{ fontSize: "0.78rem" }}>
-                      {t.emergencyDonor}
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div className="form-text">Emergency community blood donation network.</div>
+              <label htmlFor="head-occupation" className="form-label fw-semibold text-dark">
+                <i className="bi bi-briefcase text-primary me-1"></i>
+                {t.occupation}
+              </label>
+              <select
+                id="head-occupation"
+                className="form-select"
+                value={formData.headOccupation || ""}
+                onChange={(e) => setFormData({ ...formData, headOccupation: e.target.value })}
+              >
+                <option value="">{t.selectOccupation}</option>
+                <option value="SERVICE">{t.occService}</option>
+                <option value="BUSINESS">{t.occBusiness}</option>
+                <option value="RETIRED">{t.occRetired}</option>
+                <option value="HOUSEWIFE">{t.occHousewife}</option>
+                <option value="STUDENT">{t.occStudent}</option>
+                <option value="OTHER">{t.occOther}</option>
+              </select>
+              <div className="form-text">Primary occupation / profession of family head.</div>
             </div>
           </div>
         </div>
@@ -1064,43 +1067,25 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                         />
                       </div>
 
-                      {/* Member Blood Group */}
-                      <div className="col-6 col-sm-3 col-md-2">
+                      {/* Member Occupation */}
+                      <div className="col-12 col-sm-6 col-md-4">
                         <label className="form-label small fw-semibold text-dark mb-1">
-                          <i className="bi bi-droplet-fill text-danger me-1"></i>
-                          {t.bloodGroup}
+                          <i className="bi bi-briefcase text-primary me-1"></i>
+                          {t.occupation}
                         </label>
                         <select
                           className="form-select form-select-sm"
-                          value={member.bloodGroup || ""}
-                          onChange={(e) => updateMember(idx, "bloodGroup", e.target.value)}
+                          value={member.occupation || ""}
+                          onChange={(e) => updateMember(idx, "occupation", e.target.value)}
                         >
-                          <option value="">--</option>
-                          <option value="A+">A+</option>
-                          <option value="A-">A-</option>
-                          <option value="B+">B+</option>
-                          <option value="B-">B-</option>
-                          <option value="O+">O+</option>
-                          <option value="O-">O-</option>
-                          <option value="AB+">AB+</option>
-                          <option value="AB-">AB-</option>
+                          <option value="">{t.selectOccupation}</option>
+                          <option value="SERVICE">{t.occService}</option>
+                          <option value="BUSINESS">{t.occBusiness}</option>
+                          <option value="RETIRED">{t.occRetired}</option>
+                          <option value="HOUSEWIFE">{t.occHousewife}</option>
+                          <option value="STUDENT">{t.occStudent}</option>
+                          <option value="OTHER">{t.occOther}</option>
                         </select>
-                      </div>
-
-                      {/* Member Blood Donor Opt-in */}
-                      <div className="col-6 col-sm-3 col-md-2 d-flex align-items-center pt-3">
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            id={`donor-box-${idx}`}
-                            checked={Boolean(member.isBloodDonor)}
-                            onChange={(e) => updateMember(idx, "isBloodDonor", e.target.checked)}
-                          />
-                          <label className="form-check-label small text-danger fw-semibold" htmlFor={`donor-box-${idx}`} style={{ fontSize: "0.75rem" }}>
-                            {t.bloodDonorCheckbox}
-                          </label>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -1188,17 +1173,8 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                 <strong>{formData.nativePlace || "—"}</strong>
               </div>
               <div className="col-6 col-md-4">
-                <span className="text-muted d-block">{t.bloodGroup}:</span>
-                <span>
-                  {formData.headBloodGroup ? (
-                    <span className="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
-                      <i className="bi bi-droplet-fill me-1"></i>{formData.headBloodGroup}
-                    </span>
-                  ) : "—"}
-                  {formData.headIsBloodDonor && (
-                    <span className="badge bg-danger text-white">Donor</span>
-                  )}
-                </span>
+                <span className="text-muted d-block">{t.occupation}:</span>
+                <strong>{getOccupationLabel(formData.headOccupation, t)}</strong>
               </div>
               <div className="col-12 col-md-8">
                 <span className="text-muted d-block">{t.address}:</span>
@@ -1220,7 +1196,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                     <th>DOB / Age</th>
                     <th>Gender</th>
                     <th>Relationship</th>
-                    <th>{t.bloodGroup}</th>
+                    <th>{t.occupation}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1236,14 +1212,11 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                     <td>{formData.headGender}</td>
                     <td>Head</td>
                     <td>
-                      {formData.headBloodGroup && (
-                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
-                          {formData.headBloodGroup}
+                      {formData.headOccupation ? (
+                        <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                          {getOccupationLabel(formData.headOccupation, t)}
                         </span>
-                      )}
-                      {formData.headIsBloodDonor && (
-                        <span className="badge bg-danger text-white small">Donor</span>
-                      )}
+                      ) : "—"}
                     </td>
                   </tr>
                   {formData.members.map((m, idx) => (
@@ -1267,14 +1240,11 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                       <td>{m.gender}</td>
                       <td>{m.relationship}</td>
                       <td>
-                        {m.bloodGroup && (
-                          <span className="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
-                            {m.bloodGroup}
+                        {m.occupation ? (
+                          <span className="badge bg-secondary-subtle text-dark border">
+                            {getOccupationLabel(m.occupation, t)}
                           </span>
-                        )}
-                        {m.isBloodDonor && (
-                          <span className="badge bg-danger text-white small">Donor</span>
-                        )}
+                        ) : "—"}
                       </td>
                     </tr>
                   ))}

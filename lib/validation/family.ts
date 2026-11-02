@@ -180,8 +180,7 @@ export const MemberInputSchema = z
     preferredWeekdays: z.string().optional().nullable(),
     transportPreference: z.string().optional().nullable(),
     whatsappNumber: z.string().optional().nullable(),
-    bloodGroup: z.string().optional().nullable(),
-    isBloodDonor: z.boolean().default(false).optional(),
+    occupation: z.string().optional().nullable(),
   })
   .superRefine((data, ctx) => {
     if (data.dateOfBirth && data.dateOfBirth.trim()) {
@@ -213,8 +212,7 @@ export const FamilyFormSchema = z
     area: z.string().min(2, "Area or locality is required").max(100),
     nativePlace: z.string().max(100).optional().nullable(),
     sanghId: z.string().min(1, "Please select a Sangh"),
-    headBloodGroup: z.string().optional().nullable(),
-    headIsBloodDonor: z.boolean().default(false).optional(),
+    headOccupation: z.string().optional().nullable(),
     headPathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     headPreferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     headPreferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),

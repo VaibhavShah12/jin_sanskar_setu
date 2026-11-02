@@ -160,22 +160,31 @@ export default async function AnalyticsPage() {
     families,
   }));
 
-  // 8. Emergency Blood Donors by Blood Group
-  const bloodDonorGroup = await prisma.member.groupBy({
-    by: ["bloodGroup"],
+  // 8. Members by Occupation
+  const occupationsGroup = await prisma.member.groupBy({
+    by: ["occupation"],
     where: {
       status: "ACTIVE",
-      bloodGroup: { not: null },
-      isBloodDonor: true,
+      occupation: { not: null },
       ...sanghFilter,
     },
     _count: { id: true },
   });
 
-  const bloodDonorsByGroup = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((bg) => ({
-    bloodGroup: bg,
-    count: bloodDonorGroup.find((g) => g.bloodGroup === bg)?._count.id || 0,
-  }));
+  const occupationsDistribution = ["SERVICE", "BUSINESS", "RETIRED", "HOUSEWIFE", "STUDENT", "OTHER"].map((occ) => {
+    const labels: Record<string, string> = {
+      SERVICE: "Service",
+      BUSINESS: "Business",
+      RETIRED: "Retired",
+      HOUSEWIFE: "Housewife",
+      STUDENT: "Student",
+      OTHER: "Other",
+    };
+    return {
+      occupation: labels[occ] || occ,
+      count: occupationsGroup.find((g) => g.occupation === occ)?._count.id || 0,
+    };
+  });
 
   // 9. Top Native Places / Mul Gaam
   const nativePlacesGroup = await prisma.family.groupBy({
@@ -205,7 +214,7 @@ export default async function AnalyticsPage() {
     membersByArea,
     registrationsOverTime,
     childrenBySangh,
-    bloodDonorsByGroup,
+    occupationsDistribution,
     topNativePlaces,
   };
 
