@@ -143,6 +143,15 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
             <span className="text-muted small d-block">Relationship to Head</span>
             <strong className="fs-5 text-dark">{member.relationship}</strong>
           </div>
+          {member.husbandName && (
+            <div className="col-6 col-md-3">
+              <span className="text-muted small d-block">Husband&apos;s Name</span>
+              <strong className="fs-5 text-dark">
+                <i className="bi bi-person-heart text-danger me-1"></i>
+                {member.husbandName}
+              </strong>
+            </div>
+          )}
           <div className="col-6 col-md-3">
             <span className="text-muted small d-block">Family Contact</span>
             <a href={`tel:${member.family.mobile}`} className="text-decoration-none fw-semibold text-primary">

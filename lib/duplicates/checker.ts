@@ -25,28 +25,31 @@ export interface DuplicateCheckResult {
  * and possible member duplicates within that family if editing or existing.
  */
 export async function checkFamilyDuplicates(params: {
-  mobile: string;
+  mobile?: string | null;
   sanghId: string;
   excludeFamilyId?: string;
   members?: Array<{ name: string; age: number; relationship: string }>;
 }): Promise<DuplicateCheckResult> {
-  const normalizedMobile = normalizeMobile(params.mobile);
+  const normalizedMobile = params.mobile ? normalizeMobile(params.mobile) : "";
 
   // Exact duplicate check: Same normalized mobile + same Sangh (active families)
-  const existingFamily = await prisma.family.findFirst({
-    where: {
-      normalizedMobile,
-      sanghId: params.sanghId,
-      status: "ACTIVE",
-      ...(params.excludeFamilyId ? { id: { not: params.excludeFamilyId } } : {}),
-    },
-    include: {
-      sangh: true,
-      members: {
-        where: { status: "ACTIVE" },
-      },
-    },
-  });
+  // Only check if normalizedMobile is provided and at least 10 digits
+  const existingFamily = (normalizedMobile && normalizedMobile.length >= 10)
+    ? await prisma.family.findFirst({
+        where: {
+          normalizedMobile,
+          sanghId: params.sanghId,
+          status: "ACTIVE",
+          ...(params.excludeFamilyId ? { id: { not: params.excludeFamilyId } } : {}),
+        },
+        include: {
+          sangh: true,
+          members: {
+            where: { status: "ACTIVE" },
+          },
+        },
+      })
+    : null;
 
   const memberWarnings: Array<{
     name: string;

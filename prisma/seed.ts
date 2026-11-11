@@ -10,6 +10,7 @@ const SANGHS = [
   { name: "Shree Kunthunath Jain Sangh", prefix: "SKJS" },
   { name: "Eternia Jain Sangh", prefix: "EJS" },
   { name: "NIBM Jain Sangh", prefix: "NJS" },
+  { name: "Ghorpadi Jain Sangh", prefix: "GJS" },
 ];
 
 // ---------------------------------------------------------------------------

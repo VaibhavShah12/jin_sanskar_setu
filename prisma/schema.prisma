@@ -162,13 +162,13 @@ model User {
 
 // ------------------------------------------------------------------------------
 // SANGHS
-// Exactly six sanghs are seeded: MSJS, SAJS, SSJS, SKJS, EJS, NJS
+// Seeded Sanghs: MSJS, SAJS, SSJS, SKJS, EJS, NJS, GJS
 // ------------------------------------------------------------------------------
 
 model Sangh {
   id        String     @id @default(cuid())
   name      String     @unique
-  prefix    String     @unique // MSJS, SAJS, SSJS, SKJS, EJS, NJS
+  prefix    String     @unique // MSJS, SAJS, SSJS, SKJS, EJS, NJS, GJS
   active    Boolean    @default(true)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -196,12 +196,14 @@ model Family {
   familyId         String       @unique // e.g., FAM-000001
   headMemberId     String?      // Resolved after head member record is created
   headName         String
-  mobile           String
-  normalizedMobile String       // Stripped of spaces, hyphens, prefixes
+  mobile           String       @default("")
+  normalizedMobile String       @default("") // Stripped of spaces, hyphens, prefixes
   email            String?      // Family Head contact email
   address          String
   area             String
   nativePlace      String?      // Native Village / Mul Gaam (मूल वतन / મૂળ ગામ)
+  volunteerName    String?      // Volunteer name who added this family
+  filledByMember   String?      // Family member name who filled / provided details
   sanghId          String
   sangh            Sangh        @relation(fields: [sanghId], references: [id], onDelete: Restrict)
   status           RecordStatus @default(ACTIVE)
@@ -258,6 +260,7 @@ model Member {
   educationLevel    String?                              // e.g. Graduate, Post-Graduate, School
   interests         String[]          @default([])
   whatsappNumber    String?           // Individual WhatsApp contact number
+  husbandName       String?           // Husband's name for married daughter/sister
   whatsappConsent          Boolean    @default(false)
   whatsappConsentDate      DateTime?
   whatsappConsentSource    String?    // e.g. "SURVEY_FORM", "VOLUNTEER_VERIFIED", "MEMBER_PORTAL", "ADMIN_UPDATE", "TRUSTEE_UPDATE"

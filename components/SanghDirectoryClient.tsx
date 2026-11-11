@@ -12,6 +12,8 @@ export interface DirectoryMember {
   relationship: string;
   occupation: string | null;
   whatsappNumber: string | null;
+  husbandName?: string | null;
+  maritalStatus?: string | null;
 }
 
 export interface DirectoryFamily {
@@ -525,7 +527,9 @@ export default function SanghDirectoryClient({
                                 <div key={m.id} className="d-flex justify-content-between align-items-center">
                                   <span className="fw-medium text-dark">
                                     {m.name}{" "}
-                                    <span className="text-muted fs-8">({m.relationship})</span>
+                                    <span className="text-muted fs-8">
+                                      ({m.relationship}{m.husbandName ? ` • W/o ${m.husbandName}` : ""})
+                                    </span>
                                   </span>
                                   <span className="text-end">
                                     <span className="text-secondary me-2">{m.age}y</span>

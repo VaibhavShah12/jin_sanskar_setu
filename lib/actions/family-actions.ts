@@ -52,11 +52,12 @@ export async function createFamilyAction(
   }
 
   const data = validation.data;
-  const normalizedMobile = normalizeMobile(data.mobile);
+  const rawMobile = data.headWhatsappNumber || data.mobile || "";
+  const normalizedMobile = rawMobile ? normalizeMobile(rawMobile) : "";
 
-  // 4. Duplicate Check: Exact duplicate (Normalized mobile + Sangh)
+  // 4. Duplicate Check: Exact duplicate (Normalized mobile + Sangh) if mobile is provided
   const duplicateCheck = await checkFamilyDuplicates({
-    mobile: data.mobile,
+    mobile: rawMobile,
     sanghId: data.sanghId,
     members: [
       { name: data.headName, age: data.headAge, relationship: "HEAD" },
@@ -109,12 +110,14 @@ export async function createFamilyAction(
           data: {
             familyId,
             headName: data.headName.trim(),
-            mobile: data.mobile.trim(),
+            mobile: rawMobile.trim(),
             normalizedMobile,
             email: data.headEmail.trim().toLowerCase(),
             address: data.address.trim(),
             area: data.area.trim(),
             nativePlace: data.nativePlace?.trim() || null,
+            volunteerName: data.volunteerName?.trim() || user.name || user.username,
+            filledByMember: data.filledByMember?.trim() || null,
             sanghId: data.sanghId,
             status: "ACTIVE",
             createdBy: user.username,
@@ -141,6 +144,7 @@ export async function createFamilyAction(
             preferredTime: data.headPreferredTime,
             preferredWeekdays: data.headPreferredDay === "WEEKDAY" ? (data.headPreferredWeekdays || null) : null,
             transportPreference: data.headTransportPreference || null,
+            whatsappNumber: rawMobile ? normalizeMobile(rawMobile) : null,
             whatsappConsent: Boolean(data.headWhatsappConsent),
             whatsappConsentDate: data.headWhatsappConsent ? new Date() : null,
             whatsappConsentSource: data.headWhatsappConsent ? "REGISTRATION_FORM" : null,
@@ -175,6 +179,7 @@ export async function createFamilyAction(
               gender: m.gender,
               relationship: m.relationship,
               maritalStatus: m.maritalStatus || "UNMARRIED",
+              husbandName: m.husbandName?.trim() || null,
               occupation: m.occupation?.trim() || null,
               pathshalaStatus: m.pathshalaStatus,
               preferredDay: m.preferredDay,

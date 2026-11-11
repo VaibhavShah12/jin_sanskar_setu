@@ -166,7 +166,7 @@ interface FamilyFormProps {
   userUsername?: string;
 }
 
-export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
+export default function FamilyForm({ sanghs, userSanghId, userUsername }: FamilyFormProps) {
   const router = useRouter();
 
   // Language state: English, Hindi, Gujarati
@@ -199,6 +199,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
     headAge: 40,
     headGender: "MALE",
     mobile: "",
+    headWhatsappNumber: "",
     headEmail: "",
     address: "",
     area: "",
@@ -211,17 +212,19 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
     headPreferredWeekdays: "",
     headTransportPreference: "BY_SELF",
     headWhatsappConsent: false,
+    volunteerName: userUsername || "",
+    filledByMember: "",
     members: [],
   });
 
-  // Live debounced mobile duplicate check
+  // Live debounced mobile duplicate check (if phone number is entered)
   useEffect(() => {
-    const digits = formData.mobile.replace(/[^0-9]/g, "");
-    if (digits.length >= 10) {
+    const rawDigits = (formData.headWhatsappNumber || formData.mobile || "").replace(/[^0-9]/g, "");
+    if (rawDigits.length >= 10) {
       setCheckingMobile(true);
       const timer = setTimeout(async () => {
         try {
-          const res = await checkMobileAvailabilityAction(digits);
+          const res = await checkMobileAvailabilityAction(rawDigits);
           if (res.exists) {
             setDuplicateData({
               id: res.id,
@@ -244,7 +247,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
       setDuplicateData(null);
       setCheckingMobile(false);
     }
-  }, [formData.mobile]);
+  }, [formData.mobile, formData.headWhatsappNumber]);
 
   // Dynamic Members State
   const addMember = () => {
@@ -259,6 +262,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
           gender: "MALE",
           relationship: "SON",
           maritalStatus: "UNMARRIED",
+          husbandName: "",
           pathshalaStatus: "UNKNOWN",
           preferredDay: "NO_PREFERENCE",
           preferredTime: "NO_PREFERENCE",
@@ -297,12 +301,20 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
         }
       }
 
+      // If relationship changes away from daughter/sister, or maritalStatus becomes UNMARRIED, reset husbandName
+      if (field === "relationship" && value !== "DAUGHTER" && value !== "SISTER") {
+        member.husbandName = "";
+      }
+      if (field === "maritalStatus" && value !== "MARRIED") {
+        member.husbandName = "";
+      }
+
       updated[index] = member;
       return { ...prev, members: updated };
     });
   };
 
-  // Step 1 Validation
+  // Step 1 Validation: Do NOT ask for contact number in registration
   const validateStep1 = () => {
     setErrorMsg(null);
     if (!formData.headName.trim() || formData.headName.trim().length < 2) {
@@ -311,10 +323,6 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
     }
     if (formData.headDateOfBirth && formData.headDateOfBirth > todayStr) {
       setErrorMsg("Head of family Date of Birth cannot be in the future.");
-      return false;
-    }
-    if (!formData.mobile.trim() || formData.mobile.replace(/[^0-9]/g, "").length < 10) {
-      setErrorMsg("Please enter a valid 10-digit mobile number.");
       return false;
     }
     if (!formData.headEmail || !formData.headEmail.trim() || !formData.headEmail.includes("@") || !formData.headEmail.includes(".")) {
@@ -336,54 +344,73 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
     return true;
   };
 
-  // Step 2 Validation
+  // Step 2 Validation: Members, Married Daughter/Sister, and Volunteer/Form-Filler Details
   const validateStep2 = () => {
     setErrorMsg(null);
-    const headNorm = formData.mobile.replace(/[^0-9]/g, "");
+    const rawHeadPhone = formData.headWhatsappNumber || formData.mobile || "";
+    const headNorm = rawHeadPhone.replace(/[^0-9]/g, "");
     const memberPhonesSeen = new Set<string>();
 
     for (let i = 0; i < formData.members.length; i++) {
       const m = formData.members[i];
       if (!m.name.trim() || m.name.trim().length < 2) {
-        setErrorMsg(`Please enter a valid name for member #${i + 1}.`);
+        setErrorMsg(`Please enter a valid name for member #${i + 2}.`);
         return false;
       }
       if (m.dateOfBirth && m.dateOfBirth > todayStr) {
-        setErrorMsg(`Date of Birth for member #${i + 1} (${m.name}) cannot be in the future.`);
+        setErrorMsg(`Date of Birth for member #${i + 2} (${m.name}) cannot be in the future.`);
         return false;
       }
       if (m.age === undefined || m.age < 0 || m.age > 120) {
-        setErrorMsg(`Please enter a valid age for member #${i + 1} (${m.name || "Member"}).`);
+        setErrorMsg(`Please enter a valid age for member #${i + 2} (${m.name || "Member"}).`);
         return false;
       }
 
-      // Married daughter or married sister compulsory distinct phone number validation
+      // Married daughter or married sister validation
       const isDaughter = m.relationship === "DAUGHTER";
       const isSister = m.relationship === "SISTER";
       const isMarried = m.maritalStatus === "MARRIED";
       const mPhone = m.whatsappNumber ? m.whatsappNumber.replace(/[^0-9]/g, "") : "";
 
       if ((isDaughter || isSister) && isMarried) {
-        const label = isDaughter ? "married daughter" : "married sister";
-        const labelHi = isDaughter ? "विवाहित पुत्री" : "विवाहित बहन";
+        const label = isDaughter ? "daughter" : "sister";
+        const labelHi = isDaughter ? "पुत्री" : "बहन";
+
+        if (!m.husbandName || m.husbandName.trim().length < 2) {
+          setErrorMsg(`Member #${i + 2} (${m.name}) is a married ${label}. Husband's name is required (विवाहित ${labelHi} के लिए पति का नाम अनिवार्य है).`);
+          return false;
+        }
+
         if (!mPhone || mPhone.length < 10) {
-          setErrorMsg(`Member #${i + 1} (${m.name}) is a ${label}. A dedicated 10-digit phone number is required (${labelHi} के लिए फ़ोन नंबर अनिवार्य है).`);
+          setErrorMsg(`Member #${i + 2} (${m.name}) is a married ${label}. Contact number is required (विवाहित ${labelHi} के लिए फ़ोन नंबर अनिवार्य है).`);
           return false;
         }
-        if (mPhone === headNorm || mPhone.endsWith(headNorm) || headNorm.endsWith(mPhone)) {
-          setErrorMsg(`${label.charAt(0).toUpperCase() + label.slice(1)} #${i + 1} (${m.name})'s phone number cannot be the same as the family head's registered number.`);
-          return false;
-        }
-        if (memberPhonesSeen.has(mPhone)) {
-          setErrorMsg(`Phone number for ${label} #${i + 1} (${m.name}) is duplicated with another family member. A unique phone number is required.`);
+
+        if (headNorm && (mPhone === headNorm || mPhone.endsWith(headNorm) || headNorm.endsWith(mPhone))) {
+          setErrorMsg(`Married ${label} #${i + 2} (${m.name})'s phone number cannot be the same as the family head's registered number.`);
           return false;
         }
       }
 
       if (mPhone) {
+        if (memberPhonesSeen.has(mPhone)) {
+          setErrorMsg(`Phone number for member #${i + 2} (${m.name}) is duplicated with another family member in this form. A unique phone number is required.`);
+          return false;
+        }
         memberPhonesSeen.add(mPhone);
       }
     }
+
+    // Survey metadata validation (at the last below)
+    if (!formData.volunteerName || formData.volunteerName.trim().length < 2) {
+      setErrorMsg("Please enter the Volunteer Name who added this family (स्वयंसेवक का नाम अनिवार्य है).");
+      return false;
+    }
+    if (!formData.filledByMember || formData.filledByMember.trim().length < 2) {
+      setErrorMsg("Please enter the name of the Family Member who filled the form (फॉर्म भरने वाले सदस्य का नाम अनिवार्य है).");
+      return false;
+    }
+
     return true;
   };
 
@@ -391,25 +418,28 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
   const handleNext = async () => {
     if (currentStep === 1) {
       if (!validateStep1()) return;
-      // Pre-check duplicate on step 1
-      try {
-        const res = await fetch("/api/duplicate-check", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mobile: formData.mobile,
-            sanghId: formData.sanghId,
-          }),
-        });
-        const data = await res.json();
-        if (data.isExactFamilyDuplicate && data.existingFamily) {
-          setDuplicateData(data.existingFamily);
-          return;
-        } else {
-          setDuplicateData(null);
+      // Pre-check duplicate on step 1 only if mobile is present
+      const rawMobile = formData.headWhatsappNumber || formData.mobile || "";
+      if (rawMobile && rawMobile.replace(/[^0-9]/g, "").length >= 10) {
+        try {
+          const res = await fetch("/api/duplicate-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mobile: rawMobile,
+              sanghId: formData.sanghId,
+            }),
+          });
+          const data = await res.json();
+          if (data.isExactFamilyDuplicate && data.existingFamily) {
+            setDuplicateData(data.existingFamily);
+            return;
+          } else {
+            setDuplicateData(null);
+          }
+        } catch (err) {
+          console.warn("Duplicate pre-check skipped due to network:", err);
         }
-      } catch (err) {
-        console.warn("Duplicate pre-check skipped due to network:", err);
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
@@ -477,6 +507,9 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
       headPreferredWeekdays: "",
       headTransportPreference: "BY_SELF",
       headWhatsappConsent: false,
+      volunteerName: userUsername || "",
+      filledByMember: "",
+      headWhatsappNumber: "",
       members: [],
     });
     setDuplicateData(null);
@@ -670,40 +703,6 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
               </select>
             </div>
 
-            {/* Mobile Number with Live check */}
-            <div className="col-12 col-md-6">
-              <label htmlFor="family-mobile" className="form-label fw-semibold text-dark d-flex align-items-center justify-content-between">
-                <span>
-                  {t.mobile} <span className="text-danger">*</span>
-                </span>
-                {checkingMobile && (
-                  <span className="badge bg-primary-subtle text-primary small">
-                    <span className="spinner-border spinner-border-sm me-1" style={{ width: "10px", height: "10px" }}></span>
-                    {t.checkingMobile}
-                  </span>
-                )}
-              </label>
-              <input
-                type="tel"
-                id="family-mobile"
-                inputMode="numeric"
-                autoComplete="tel"
-                className={`form-control ${duplicateData ? "border-danger bg-danger-subtle" : ""}`}
-                placeholder="e.g. 9822012345"
-                value={formData.mobile}
-                onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                required
-              />
-              {duplicateData ? (
-                <div className="form-text text-danger fw-semibold">
-                  <i className="bi bi-exclamation-circle-fill me-1"></i>
-                  {t.mobileDuplicate} {duplicateData.headName} ({duplicateData.sanghName})
-                </div>
-              ) : (
-                <div className="form-text">{t.mobileHint}</div>
-              )}
-            </div>
-
             {/* Head Email ID */}
             <div className="col-12 col-md-6">
               <label htmlFor="head-email" className="form-label fw-semibold text-dark">
@@ -718,7 +717,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                 onChange={(e) => setFormData({ ...formData, headEmail: e.target.value })}
                 required
               />
-              <div className="form-text">Compulsory for notifications, surveys, and record updates.</div>
+              <div className="form-text">Required for survey notifications and record updates.</div>
             </div>
 
             {/* Head of Family Name */}
@@ -902,9 +901,9 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
         <div className="step-container">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <h4 className="fw-bold text-dark mb-0">Section 2: Additional Family Members</h4>
+              <h4 className="fw-bold text-dark mb-0">Section 2: Family Members Details</h4>
               <p className="text-muted small mb-0">
-                Head ({formData.headName}, Age {formData.headAge}) is recorded as Member #1.
+                Contact numbers can be filled by each member (not compulsory). For married daughters or sisters, husband&apos;s name and contact number are required.
               </p>
             </div>
             <button
@@ -916,6 +915,44 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
               <i className="bi bi-person-plus"></i>
               <span>Add Member</span>
             </button>
+          </div>
+
+          {/* Member #1: Head of Family Contact Number (Not Compulsory) */}
+          <div className="card p-3 border rounded-3 bg-white shadow-xs mb-3 border-primary-subtle">
+            <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+              <div className="d-flex align-items-center gap-2">
+                <span className="badge bg-primary text-white font-monospace">Member #1</span>
+                <strong className="text-dark">{formData.headName}</strong>
+                <span className="badge bg-secondary-subtle text-secondary small">Head of Family • Age {formData.headAge}</span>
+              </div>
+              <span className="badge bg-light text-muted border">Primary Household Member</span>
+            </div>
+            <div className="row g-2 align-items-center">
+              <div className="col-12 col-md-6">
+                <label className="form-label small fw-semibold text-dark mb-1">
+                  <i className="bi bi-whatsapp text-success me-1"></i>
+                  Head Contact / WhatsApp Number
+                  <span className="text-muted fw-normal ms-1">(Optional / Not compulsory - ऐच्छिक)</span>
+                </label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={15}
+                  className="form-control form-control-sm"
+                  placeholder="Head WhatsApp / phone number (optional)"
+                  value={formData.headWhatsappNumber || formData.mobile || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      headWhatsappNumber: val,
+                      mobile: val,
+                    }));
+                  }}
+                />
+                <div className="form-text small">Each member can optionally fill their own contact number.</div>
+              </div>
+            </div>
           </div>
 
           {formData.members.length === 0 ? (
@@ -937,12 +974,25 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
             <div className="d-flex flex-column gap-3 mb-4">
               {formData.members.map((member, idx) => {
                 const isChild = member.age < 18;
+                const isDaughter = member.relationship === "DAUGHTER";
+                const isSister = member.relationship === "SISTER";
+                const isDaughterOrSister = isDaughter || isSister;
+                const isMarried = member.maritalStatus === "MARRIED";
+
                 return (
-                  <div key={idx} className="card p-3 border rounded-3 bg-light shadow-sm">
+                  <div key={idx} className={`card p-3 border rounded-3 bg-light shadow-sm ${isDaughterOrSister && isMarried ? "border-primary" : ""}`}>
                     <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                      <span className="badge bg-secondary-subtle text-secondary font-monospace">
-                        Member #{idx + 2} {isChild && <span className="badge bg-warning text-dark ms-1">Child (&lt;18)</span>}
-                      </span>
+                      <div>
+                        <span className="badge bg-secondary-subtle text-secondary font-monospace me-1">
+                          Member #{idx + 2}
+                        </span>
+                        {isChild && <span className="badge bg-warning text-dark ms-1">Child (&lt;18)</span>}
+                        {isDaughterOrSister && isMarried && (
+                          <span className="badge bg-primary-subtle text-primary border border-primary-subtle ms-1">
+                            Married {isDaughter ? "Daughter" : "Sister"}
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => removeMember(idx)}
@@ -1028,7 +1078,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                       {/* Relationship */}
                       <div className="col-6 col-sm-4 col-md-2">
                         <label className="form-label small fw-semibold text-dark mb-1">
-                          Relationship
+                          Relationship <span className="text-danger">*</span>
                         </label>
                         <select
                           className="form-select form-select-sm"
@@ -1049,26 +1099,81 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                         </select>
                       </div>
 
-                      {/* Individual Phone / WhatsApp Number */}
-                      <div className="col-12 col-sm-6 col-md-3">
-                        <label className="form-label small fw-semibold text-dark mb-1">
-                          <i className="bi bi-whatsapp text-success me-1"></i>
-                          Phone / WhatsApp
-                          <span className="text-muted fw-normal ms-1">(Optional)</span>
-                        </label>
-                        <input
-                          type="tel"
-                          inputMode="numeric"
-                          maxLength={15}
-                          className="form-control form-control-sm"
-                          placeholder="Individual WhatsApp (optional)"
-                          value={member.whatsappNumber || ""}
-                          onChange={(e) => updateMember(idx, "whatsappNumber", e.target.value)}
-                        />
-                      </div>
+                      {/* Marital Status for Daughter or Sister */}
+                      {isDaughterOrSister && (
+                        <div className="col-12 col-sm-6 col-md-3">
+                          <label className="form-label small fw-semibold text-dark mb-1">
+                            Marital Status (विवाह स्थिति) <span className="text-danger">*</span>
+                          </label>
+                          <select
+                            className="form-select form-select-sm fw-semibold"
+                            value={member.maritalStatus || "UNMARRIED"}
+                            onChange={(e) => updateMember(idx, "maritalStatus", e.target.value as any)}
+                          >
+                            <option value="UNMARRIED">Unmarried (अविवाहित)</option>
+                            <option value="MARRIED">Married (विवाहित)</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* If Daughter or Sister is Married: Ask Husband's Name & Contact Number */}
+                      {isDaughterOrSister && isMarried ? (
+                        <>
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              <i className="bi bi-person-heart text-danger me-1"></i>
+                              Husband&apos;s Name (पति का नाम) <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              className="form-control form-control-sm border-primary"
+                              placeholder="Husband's full name"
+                              value={member.husbandName || ""}
+                              onChange={(e) => updateMember(idx, "husbandName", e.target.value)}
+                              required
+                            />
+                          </div>
+
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              <i className="bi bi-telephone-fill text-primary me-1"></i>
+                              Her Contact Number <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="tel"
+                              inputMode="numeric"
+                              maxLength={15}
+                              className="form-control form-control-sm border-primary"
+                              placeholder="10-digit mobile number"
+                              value={member.whatsappNumber || ""}
+                              onChange={(e) => updateMember(idx, "whatsappNumber", e.target.value)}
+                              required
+                            />
+                            <div className="form-text small text-primary">Required for married daughter/sister.</div>
+                          </div>
+                        </>
+                      ) : (
+                        /* Individual Phone / WhatsApp Number for other members (Not Compulsory) */
+                        <div className="col-12 col-sm-6 col-md-3">
+                          <label className="form-label small fw-semibold text-dark mb-1">
+                            <i className="bi bi-whatsapp text-success me-1"></i>
+                            Phone / WhatsApp
+                            <span className="text-muted fw-normal ms-1">(Optional / Not compulsory)</span>
+                          </label>
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            maxLength={15}
+                            className="form-control form-control-sm"
+                            placeholder="Phone / WhatsApp (optional)"
+                            value={member.whatsappNumber || ""}
+                            onChange={(e) => updateMember(idx, "whatsappNumber", e.target.value)}
+                          />
+                        </div>
+                      )}
 
                       {/* Member Occupation */}
-                      <div className="col-12 col-sm-6 col-md-4">
+                      <div className="col-12 col-sm-6 col-md-3">
                         <label className="form-label small fw-semibold text-dark mb-1">
                           <i className="bi bi-briefcase text-primary me-1"></i>
                           {t.occupation}
@@ -1101,6 +1206,63 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
               </button>
             </div>
           )}
+
+          {/* =====================================================================
+              SURVEY METADATA: VOLUNTEER & FORM FILLER DETAILS (AT THE LAST BELOW)
+              ===================================================================== */}
+          <div className="card p-3 p-md-4 border border-2 border-primary-subtle rounded-3 bg-white shadow-sm mt-4">
+            <div className="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+              <div className="rounded-circle bg-primary-subtle text-primary p-2 fs-5">
+                <i className="bi bi-clipboard2-check"></i>
+              </div>
+              <div>
+                <h6 className="fw-bold text-dark mb-0">
+                  Survey Submission &amp; Volunteer Details (सर्वेक्षण प्रविष्टि विवरण)
+                </h6>
+                <small className="text-muted">
+                  Record who added this family and which family member provided the information.
+                </small>
+              </div>
+            </div>
+
+            <div className="row g-3">
+              {/* Who added this family: Volunteer's Name */}
+              <div className="col-12 col-md-6">
+                <label htmlFor="family-volunteer-name" className="form-label fw-semibold text-dark">
+                  <i className="bi bi-person-badge text-primary me-1"></i>
+                  Who Added This Family (Volunteer Name / स्वयंसेवक का नाम) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="family-volunteer-name"
+                  className="form-control"
+                  placeholder="Enter volunteer name who conducted the survey"
+                  value={formData.volunteerName || ""}
+                  onChange={(e) => setFormData({ ...formData, volunteerName: e.target.value })}
+                  required
+                />
+                <div className="form-text">Name of the volunteer who surveyed / added this family.</div>
+              </div>
+
+              {/* Family member who filled names */}
+              <div className="col-12 col-md-6">
+                <label htmlFor="family-filled-by" className="form-label fw-semibold text-dark">
+                  <i className="bi bi-person-check text-success me-1"></i>
+                  Family Member Who Filled / Provided Names (विवरण देने वाले सदस्य का नाम) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="family-filled-by"
+                  className="form-control"
+                  placeholder="e.g. Ramesh Shah (Self / Son / Daughter)"
+                  value={formData.filledByMember || ""}
+                  onChange={(e) => setFormData({ ...formData, filledByMember: e.target.value })}
+                  required
+                />
+                <div className="form-text">Name of the family member who filled the form or provided details.</div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1143,7 +1305,7 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
 
           {/* Summary Cards */}
           <div className="card p-3 border rounded-3 mb-3 bg-light">
-            <h6 className="fw-bold text-dark border-bottom pb-2 mb-2">Household Information</h6>
+            <h6 className="fw-bold text-dark border-bottom pb-2 mb-2">Household &amp; Survey Submission Information</h6>
             <div className="row g-2 small">
               <div className="col-6 col-md-4">
                 <span className="text-muted d-block">Sangh:</span>
@@ -1157,8 +1319,8 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                 )}
               </div>
               <div className="col-6 col-md-4">
-                <span className="text-muted d-block">Mobile Number:</span>
-                <strong>{formData.mobile}</strong>
+                <span className="text-muted d-block">Head Contact Number:</span>
+                <strong>{formData.headWhatsappNumber || formData.mobile || "— (Not provided)"}</strong>
               </div>
               <div className="col-6 col-md-4">
                 <span className="text-muted d-block">Head Email:</span>
@@ -1176,7 +1338,15 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                 <span className="text-muted d-block">{t.occupation}:</span>
                 <strong>{getOccupationLabel(formData.headOccupation, t)}</strong>
               </div>
-              <div className="col-12 col-md-8">
+              <div className="col-6 col-md-4">
+                <span className="text-muted d-block">Added by Volunteer:</span>
+                <strong className="text-primary">{formData.volunteerName || "—"}</strong>
+              </div>
+              <div className="col-6 col-md-4">
+                <span className="text-muted d-block">Form Filled By (Member):</span>
+                <strong className="text-success">{formData.filledByMember || "—"}</strong>
+              </div>
+              <div className="col-12">
                 <span className="text-muted d-block">{t.address}:</span>
                 <span>{formData.address}</span>
               </div>
@@ -1195,14 +1365,21 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                     <th>Name</th>
                     <th>DOB / Age</th>
                     <th>Gender</th>
-                    <th>Relationship</th>
+                    <th>Relationship &amp; Marital Info</th>
                     <th>{t.occupation}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td><strong>1</strong></td>
-                    <td className="fw-bold">{formData.headName} <span className="badge bg-secondary">Head</span></td>
+                    <td className="fw-bold">
+                      {formData.headName} <span className="badge bg-secondary ms-1">Head</span>
+                      {(formData.headWhatsappNumber || formData.mobile) && (
+                        <div className="small text-success fw-normal">
+                          <i className="bi bi-whatsapp me-1"></i>{formData.headWhatsappNumber || formData.mobile}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <span className="fw-semibold">{formData.headAge} yrs</span>
                       {formData.headDateOfBirth && (
@@ -1219,35 +1396,53 @@ export default function FamilyForm({ sanghs, userSanghId }: FamilyFormProps) {
                       ) : "—"}
                     </td>
                   </tr>
-                  {formData.members.map((m, idx) => (
-                    <tr key={idx}>
-                      <td>{idx + 2}</td>
-                      <td className="fw-semibold">
-                        {m.name}
-                        {m.whatsappNumber && (
-                          <div className="small text-success fw-normal">
-                            <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <span className="fw-semibold">{m.age} yrs</span>
-                        {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}
-                        {m.dateOfBirth && (
-                          <div className="small text-muted font-monospace">{m.dateOfBirth}</div>
-                        )}
-                      </td>
-                      <td>{m.gender}</td>
-                      <td>{m.relationship}</td>
-                      <td>
-                        {m.occupation ? (
-                          <span className="badge bg-secondary-subtle text-dark border">
-                            {getOccupationLabel(m.occupation, t)}
-                          </span>
-                        ) : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {formData.members.map((m, idx) => {
+                    const isDaughterOrSister = m.relationship === "DAUGHTER" || m.relationship === "SISTER";
+                    const isMarried = m.maritalStatus === "MARRIED";
+
+                    return (
+                      <tr key={idx}>
+                        <td>{idx + 2}</td>
+                        <td className="fw-semibold">
+                          {m.name}
+                          {m.whatsappNumber && (
+                            <div className="small text-success fw-normal">
+                              <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className="fw-semibold">{m.age} yrs</span>
+                          {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                          {m.dateOfBirth && (
+                            <div className="small text-muted font-monospace">{m.dateOfBirth}</div>
+                          )}
+                        </td>
+                        <td>{m.gender}</td>
+                        <td>
+                          <div>{m.relationship}</div>
+                          {isDaughterOrSister && (
+                            <div className="small mt-1">
+                              {isMarried ? (
+                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                  Married • Husband: {m.husbandName || "—"}
+                                </span>
+                              ) : (
+                                <span className="badge bg-light text-muted border">Unmarried</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          {m.occupation ? (
+                            <span className="badge bg-secondary-subtle text-dark border">
+                              {getOccupationLabel(m.occupation, t)}
+                            </span>
+                          ) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

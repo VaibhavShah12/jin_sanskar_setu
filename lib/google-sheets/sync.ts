@@ -97,7 +97,7 @@ function formatMemberRow(member: any): string[] {
     member.gender,
     member.relationship,
     member.family.headName,
-    member.family.mobile,
+    member.family.mobile || "",
     member.family.address,
     member.family.area,
     member.pathshalaStatus,

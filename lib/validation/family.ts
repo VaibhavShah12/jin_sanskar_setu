@@ -174,6 +174,7 @@ export const MemberInputSchema = z
     gender: GenderEnum,
     relationship: RelationshipEnum,
     maritalStatus: MaritalStatusEnum.default("UNMARRIED"),
+    husbandName: z.string().optional().nullable(),
     pathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     preferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     preferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),
@@ -198,6 +199,26 @@ export const MemberInputSchema = z
         });
       }
     }
+
+    // Daughter or sister married validation: if married, contact number and husband's name are required
+    const isDaughterOrSister = data.relationship === "DAUGHTER" || data.relationship === "SISTER";
+    if (isDaughterOrSister && data.maritalStatus === "MARRIED") {
+      if (!data.husbandName || data.husbandName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Husband's name is required for married ${data.relationship.toLowerCase()}.`,
+          path: ["husbandName"],
+        });
+      }
+      const phoneDigits = data.whatsappNumber ? data.whatsappNumber.replace(/[^0-9]/g, "") : "";
+      if (!phoneDigits || phoneDigits.length < 10) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `A valid 10-digit contact number is required for married ${data.relationship.toLowerCase()}.`,
+          path: ["whatsappNumber"],
+        });
+      }
+    }
   });
 
 export const FamilyFormSchema = z
@@ -206,7 +227,8 @@ export const FamilyFormSchema = z
     headDateOfBirth: z.string().optional().nullable(),
     headAge: z.coerce.number().int().min(1, "Valid age required").max(120),
     headGender: GenderEnum.default("MALE"),
-    mobile: z.string().min(10, "Valid mobile number is required (min 10 digits)").max(15),
+    mobile: z.string().optional().nullable(),
+    headWhatsappNumber: z.string().optional().nullable(),
     headEmail: z.string().min(1, "Head email ID is required").email("Please enter a valid email address (e.g. name@example.com)"),
     address: z.string().min(5, "Address must have at least 5 characters").max(300),
     area: z.string().min(2, "Area or locality is required").max(100),
@@ -219,6 +241,8 @@ export const FamilyFormSchema = z
     headPreferredWeekdays: z.string().optional().nullable(),
     headTransportPreference: z.string().optional().nullable(),
     headWhatsappConsent: z.boolean().optional(),
+    volunteerName: z.string().min(2, "Volunteer name is required (who added this family)").max(100),
+    filledByMember: z.string().min(2, "Name of family member who filled / gave details is required").max(100),
     members: z.array(MemberInputSchema).default([]),
   })
   .superRefine((data, ctx) => {
@@ -238,23 +262,24 @@ export const FamilyFormSchema = z
     }
 
     // Phone deduplication: no two members can share the same WhatsApp number
-    const headNormalized = normalizeMobile(data.mobile);
+    const effectiveHeadPhone = data.headWhatsappNumber || data.mobile || "";
+    const headNormalized = effectiveHeadPhone ? normalizeMobile(effectiveHeadPhone) : "";
     const seenNumbers = new Map<string, number>();
 
     data.members.forEach((m, idx) => {
       const mNormalized = m.whatsappNumber ? normalizeMobile(m.whatsappNumber) : "";
 
       if (mNormalized) {
-        if (mNormalized === headNormalized) {
+        if (headNormalized && mNormalized === headNormalized) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "This phone number is the same as the family head's number. Please use a different number.",
+            message: "This phone number is the same as the family head's number. Please use a distinct number.",
             path: ["members", idx, "whatsappNumber"],
           });
         } else if (seenNumbers.has(mNormalized)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "This phone number is already registered with another family member. A unique number is required.",
+            message: "This phone number is already registered with another family member in this form. A unique number is required.",
             path: ["members", idx, "whatsappNumber"],
           });
         }

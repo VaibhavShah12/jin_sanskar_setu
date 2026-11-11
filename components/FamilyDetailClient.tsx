@@ -296,7 +296,15 @@ export default function FamilyDetailClient({
                       )}
                     </td>
                     <td className="text-capitalize">{m.gender.toLowerCase().replace(/_/g, " ")}</td>
-                    <td>{m.relationship}</td>
+                    <td>
+                      <div className="fw-medium">{m.relationship}</div>
+                      {m.husbandName && (
+                        <div className="small text-primary mt-1">
+                          <i className="bi bi-person-heart me-1"></i>
+                          Husband: <strong>{m.husbandName}</strong>
+                        </div>
+                      )}
+                    </td>
                     <td>
                       {m.interests && m.interests.length > 0 ? (
                         <div className="d-flex flex-wrap gap-1" style={{ maxWidth: "280px" }}>
@@ -372,6 +380,12 @@ export default function FamilyDetailClient({
                       <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
                     </div>
                   )}
+                  {m.husbandName && (
+                    <div className="small text-primary mt-1">
+                      <i className="bi bi-person-heart me-1"></i>
+                      Husband: <strong>{m.husbandName}</strong>
+                    </div>
+                  )}
                 </div>
                 <div className="text-end">
                   <span className="badge bg-light text-secondary border">
@@ -422,6 +436,42 @@ export default function FamilyDetailClient({
             </div>
           );
         })}
+      </div>
+
+      {/* Survey & Form Submission Attribution Card (At the last below) */}
+      <div className="card-clean p-4 mb-4 bg-white border border-primary-subtle shadow-sm">
+        <div className="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+          <div className="p-2 bg-primary-subtle rounded-circle text-primary">
+            <i className="bi bi-clipboard2-check fs-5"></i>
+          </div>
+          <div>
+            <h5 className="fs-6 fw-bold text-dark mb-0">Survey Entry &amp; Submission Attribution (सर्वेक्षण प्रविष्टि विवरण)</h5>
+            <small className="text-muted">Attribution of the volunteer who surveyed this family and the family member who provided details.</small>
+          </div>
+        </div>
+        <div className="row g-3 small">
+          <div className="col-12 col-sm-6 col-md-4">
+            <span className="text-muted d-block">Who Added This Family (Volunteer / स्वयंसेवक):</span>
+            <strong className="fs-6 text-primary">
+              <i className="bi bi-person-badge me-1"></i>
+              {family.volunteerName || family.createdBy || "Sangh Volunteer"}
+            </strong>
+          </div>
+          <div className="col-12 col-sm-6 col-md-4">
+            <span className="text-muted d-block">Form Filled / Names Provided By (Family Member / सदस्य):</span>
+            <strong className="fs-6 text-success">
+              <i className="bi bi-person-check me-1"></i>
+              {family.filledByMember || "Family Member"}
+            </strong>
+          </div>
+          <div className="col-12 col-sm-6 col-md-4">
+            <span className="text-muted d-block">Survey Registration Date:</span>
+            <span className="fw-semibold text-dark">
+              <i className="bi bi-calendar3 me-1"></i>
+              {new Date(family.createdAt).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Confirmation Modal for Archiving Family (ADMIN ONLY) */}

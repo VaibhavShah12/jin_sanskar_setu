@@ -40,6 +40,8 @@ export default async function SanghDirectoryPage() {
             relationship: true,
             occupation: true,
             whatsappNumber: true,
+            husbandName: true,
+            maritalStatus: true,
           },
           orderBy: [{ relationship: "asc" }, { age: "desc" }],
         },
@@ -64,7 +66,7 @@ export default async function SanghDirectoryPage() {
     id: f.id,
     familyId: f.familyId,
     headName: f.headName,
-    mobile: f.mobile,
+    mobile: f.mobile || "",
     address: f.address,
     area: f.area,
     nativePlace: f.nativePlace,
@@ -82,6 +84,8 @@ export default async function SanghDirectoryPage() {
       relationship: m.relationship,
       occupation: m.occupation,
       whatsappNumber: m.whatsappNumber,
+      husbandName: m.husbandName,
+      maritalStatus: m.maritalStatus,
     })),
   }));
 
