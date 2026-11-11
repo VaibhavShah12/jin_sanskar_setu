@@ -7,6 +7,7 @@ import { generateFamilyId, generateMemberIds } from "@/lib/ids/generator";
 import { checkFamilyDuplicates } from "@/lib/duplicates/checker";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { triggerBackgroundSync } from "@/lib/google-sheets/sync";
+import { sendFamilyRegistrationEmail } from "@/lib/email/mailer";
 
 export interface CreateFamilyResult {
   success: boolean;
@@ -241,6 +242,29 @@ export async function createFamilyAction(
     // 6. Post-commit: Asynchronously trigger Google Sheet sync
     // Database data is safely committed; Google Sheet errors will not rollback the DB
     triggerBackgroundSync(result.allMemberIds, user.username);
+
+    // 7. Post-commit: Asynchronously dispatch confirmation email to Head of Family
+    if (data.headEmail && data.headEmail.trim()) {
+      const membersList = [
+        { name: data.headName.trim(), relationship: "Head", memberId: result.headMemberId },
+        ...data.members.map((m, idx) => ({
+          name: m.name.trim(),
+          relationship: m.relationship,
+          memberId: result.allMemberIds[idx + 1] || "",
+        })),
+      ];
+
+      sendFamilyRegistrationEmail({
+        to: data.headEmail.trim(),
+        headName: data.headName.trim(),
+        familyId: result.familyId,
+        memberIds: result.allMemberIds,
+        sanghName: sangh.name,
+        membersList,
+      }).catch((emailErr) => {
+        console.error("[EMAIL_DISPATCH_ERROR] Failed to send family registration email:", emailErr);
+      });
+    }
 
     return {
       success: true,

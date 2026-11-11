@@ -170,6 +170,7 @@ model Sangh {
   name      String     @unique
   prefix    String     @unique // MSJS, SAJS, SSJS, SKJS, EJS, NJS, GJS
   active    Boolean    @default(true)
+  annualLavaajamAmount Float? @default(1100)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 

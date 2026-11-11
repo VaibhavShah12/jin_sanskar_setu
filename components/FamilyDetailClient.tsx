@@ -7,6 +7,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import { archiveFamilyAction, archiveMemberAction } from "@/lib/actions/family-actions";
 import { submitCorrectionRequestAction } from "@/lib/actions/member-form-actions";
+import { sendDirectFamilyEmailAction } from "@/lib/actions/lavaajam-actions";
 import { getMemberCalculatedAge } from "@/lib/validation/family";
 import { MEMBER_INTERESTS } from "@/lib/constants/interests";
 
@@ -45,6 +46,37 @@ export default function FamilyDetailClient({
     correctionDetails: "",
     additionalNotes: "",
   });
+
+  // Direct Family Email State
+  const [showDirectEmailModal, setShowDirectEmailModal] = useState(false);
+  const [directSubject, setDirectSubject] = useState(`श्री ${family.sangh?.name || "संघ"} - परिवार संपर्क (${family.familyId})`);
+  const [directMessage, setDirectMessage] = useState("");
+  const [directSending, setDirectSending] = useState(false);
+  const [directEmailMsg, setDirectEmailMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleSendDirectEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDirectSending(true);
+    setDirectEmailMsg(null);
+    try {
+      const res = await sendDirectFamilyEmailAction({
+        familyId: family.familyId,
+        subject: directSubject,
+        message: directMessage,
+      });
+      if (res.success) {
+        setDirectEmailMsg({ type: "success", text: res.message || "Email sent successfully!" });
+        setDirectMessage("");
+        setTimeout(() => setShowDirectEmailModal(false), 2000);
+      } else {
+        setDirectEmailMsg({ type: "error", text: res.error || "Failed to send email." });
+      }
+    } catch (err: any) {
+      setDirectEmailMsg({ type: "error", text: err?.message || "An unexpected error occurred." });
+    } finally {
+      setDirectSending(false);
+    }
+  };
 
   // Archive Family (ADMIN ONLY)
   const handleArchive = async () => {
@@ -127,6 +159,18 @@ export default function FamilyDetailClient({
             >
               <i className="bi bi-pencil-square me-1 text-warning-emphasis"></i> Request Correction
             </button>
+            {family.email && (
+              <button
+                onClick={() => {
+                  setShowDirectEmailModal(true);
+                  setDirectEmailMsg(null);
+                }}
+                className="btn btn-outline-info btn-sm px-3 text-dark fw-semibold shadow-sm"
+                title="Send official message to registered email"
+              >
+                <i className="bi bi-envelope-at me-1 text-info"></i> Send Email
+              </button>
+            )}
             {isAdmin && family.status === "ACTIVE" && (
               <button
                 onClick={() => setShowArchiveModal(true)}
@@ -149,6 +193,14 @@ export default function FamilyDetailClient({
               <i className="bi bi-telephone-fill me-1"></i> {family.mobile}
             </a>
           </div>
+          {family.email && (
+            <div className="col-12 col-sm-6 col-md-3">
+              <span className="text-muted small d-block">Registered Email</span>
+              <a href={`mailto:${family.email}`} className="text-decoration-none fw-semibold text-primary">
+                <i className="bi bi-envelope-fill me-1"></i> {family.email}
+              </a>
+            </div>
+          )}
           <div className="col-12 col-sm-6 col-md-3">
             <span className="text-muted small d-block">Area / Locality</span>
             <span className="fw-semibold text-dark">{family.area}</span>
@@ -659,6 +711,75 @@ export default function FamilyDetailClient({
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Direct Family Email Modal */}
+      {showDirectEmailModal && (
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 1050 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content rounded-4 border-0 shadow-lg">
+              <div className="modal-header bg-info text-dark py-3 px-4">
+                <h5 className="modal-title fw-bold mb-0">
+                  <i className="bi bi-envelope-at-fill me-2"></i>
+                  Send Email to {family.headName} ({family.familyId})
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setShowDirectEmailModal(false)}></button>
+              </div>
+              <form onSubmit={handleSendDirectEmail}>
+                <div className="modal-body p-4">
+                  <div className="bg-light p-2 rounded-3 border mb-3 small">
+                    <div><strong>Head of Family:</strong> {family.headName}</div>
+                    <div><strong>Recipient Email:</strong> <span className="font-monospace text-primary">{family.email}</span></div>
+                  </div>
+
+                  {directEmailMsg && (
+                    <div className={`alert py-2 px-3 small d-flex align-items-center gap-2 mb-3 ${
+                      directEmailMsg.type === "success" ? "alert-success" : "alert-danger"
+                    }`}>
+                      <i className={`bi ${directEmailMsg.type === "success" ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill"}`}></i>
+                      <span>{directEmailMsg.text}</span>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <label className="form-label small fw-bold text-dark mb-1">
+                      Subject (विषय) <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="form-control form-control-sm"
+                      value={directSubject}
+                      onChange={(e) => setDirectSubject(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="mb-2">
+                    <label className="form-label small fw-bold text-dark mb-1">
+                      Message (संदेश) <span className="text-danger">*</span>
+                    </label>
+                    <textarea
+                      required
+                      rows={5}
+                      placeholder="Type your message here..."
+                      className="form-control form-control-sm"
+                      value={directMessage}
+                      onChange={(e) => setDirectMessage(e.target.value)}
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div className="modal-footer bg-light py-2 px-4 d-flex justify-content-between">
+                  <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setShowDirectEmailModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={directSending} className="btn btn-info text-dark btn-sm px-4 fw-bold shadow-xs">
+                    {directSending ? "Sending..." : "Send Email (ईमेल पाठवा)"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

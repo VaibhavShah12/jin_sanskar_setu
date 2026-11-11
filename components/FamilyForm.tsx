@@ -537,10 +537,24 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
         </p>
 
         {/* Generated Family ID */}
-        <div className="card bg-light border-0 p-3 mb-4 d-inline-block w-100 max-w-md mx-auto">
+        <div className="card bg-light border-0 p-3 mb-3 d-inline-block w-100 max-w-md mx-auto">
           <small className="text-muted text-uppercase fw-semibold d-block">Generated Family ID</small>
           <span className="display-6 fw-bold text-primary font-monospace">{successResult.familyId}</span>
         </div>
+
+        {/* Registered Email Dispatch Notification */}
+        {formData.headEmail && (
+          <div className="alert alert-info border-info d-flex align-items-center gap-3 max-w-md mx-auto text-start py-2 px-3 mb-4 shadow-xs">
+            <i className="bi bi-envelope-check-fill fs-3 text-info flex-shrink-0"></i>
+            <div>
+              <div className="fw-bold text-dark">Confirmation Email Sent (ईमेल पाठवला आहे)</div>
+              <small className="text-muted">
+                Family ID, Member IDs, and portal link have been sent directly to{" "}
+                <strong>{formData.headEmail}</strong>. No QR scan is required.
+              </small>
+            </div>
+          </div>
+        )}
 
         {/* Generated Member IDs */}
         <div className="mb-4 text-start max-w-md mx-auto">
