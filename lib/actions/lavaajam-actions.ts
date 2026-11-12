@@ -286,30 +286,36 @@ export async function saveLavaajamRecordAction(payload: SaveLavaajamPayload) {
       },
     });
 
-    // Post-commit: Asynchronously dispatch email receipt if PAID and family has an email
+    // Post-commit: Dispatch email receipt if PAID and family has an email
     let emailSent = false;
     let emailRecipient: string | null = null;
     const targetEmail = family.email?.trim() || payload.email?.trim();
 
     if (payload.status === "PAID" && targetEmail && targetEmail.includes("@")) {
-      sendLavaajamReceiptEmail({
-        to: targetEmail,
-        headName: family.headName,
-        familyId: family.familyId,
-        sanghName: family.sangh.name,
-        receiptNumber: receiptNo || `REC-${record.id.slice(-6)}`,
-        amount: numericAmount,
-        year: payload.year,
-        paymentDate: parsedDate ? parsedDate.toISOString() : new Date().toISOString(),
-        paymentMode: payload.paymentMode || "CASH",
-        receiverName: payload.receiverName?.trim() || user.name || user.username,
-        notes: payload.notes?.trim() || null,
-      }).catch((emailErr) => {
-        console.error("[EMAIL_DISPATCH_ERROR] Failed to send Lavaajam receipt email:", emailErr);
-      });
+      try {
+        const emailDispatchResult = await sendLavaajamReceiptEmail({
+          to: targetEmail,
+          headName: family.headName,
+          familyId: family.familyId,
+          sanghName: family.sangh.name,
+          receiptNumber: receiptNo || `REC-${record.id.slice(-6)}`,
+          amount: numericAmount,
+          year: payload.year,
+          paymentDate: parsedDate ? parsedDate.toISOString() : new Date().toISOString(),
+          paymentMode: payload.paymentMode || "CASH",
+          receiverName: payload.receiverName?.trim() || user.name || user.username,
+          notes: payload.notes?.trim() || null,
+        });
 
-      emailSent = true;
-      emailRecipient = targetEmail;
+        if (emailDispatchResult.success) {
+          emailSent = true;
+          emailRecipient = targetEmail;
+        } else {
+          console.error("[EMAIL_DISPATCH_WARNING] Lavaajam receipt email was not dispatched:", emailDispatchResult.error);
+        }
+      } catch (emailErr) {
+        console.error("[EMAIL_DISPATCH_ERROR] Failed to send Lavaajam receipt email:", emailErr);
+      }
     }
 
     // Audit Log

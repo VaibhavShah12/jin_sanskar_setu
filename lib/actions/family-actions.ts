@@ -284,7 +284,7 @@ export async function createFamilyAction(
     // Database data is safely committed; Google Sheet errors will not rollback the DB
     triggerBackgroundSync(result.allMemberIds, user.username);
 
-    // 7. Post-commit: Asynchronously dispatch confirmation email to Head of Family
+    // 7. Post-commit: Dispatch confirmation email to Head of Family
     if (data.headEmail && data.headEmail.trim()) {
       const membersList = [
         { name: data.headName.trim(), relationship: "Head", memberId: result.headMemberId },
@@ -295,16 +295,21 @@ export async function createFamilyAction(
         })),
       ];
 
-      sendFamilyRegistrationEmail({
-        to: data.headEmail.trim(),
-        headName: data.headName.trim(),
-        familyId: result.familyId,
-        memberIds: result.allMemberIds,
-        sanghName: sangh.name,
-        membersList,
-      }).catch((emailErr) => {
+      try {
+        const emailDispatchResult = await sendFamilyRegistrationEmail({
+          to: data.headEmail.trim(),
+          headName: data.headName.trim(),
+          familyId: result.familyId,
+          memberIds: result.allMemberIds,
+          sanghName: sangh.name,
+          membersList,
+        });
+        if (!emailDispatchResult.success) {
+          console.error("[EMAIL_DISPATCH_WARNING] Registration email was not dispatched:", emailDispatchResult.error);
+        }
+      } catch (emailErr) {
         console.error("[EMAIL_DISPATCH_ERROR] Failed to send family registration email:", emailErr);
-      });
+      }
     }
 
     return {
