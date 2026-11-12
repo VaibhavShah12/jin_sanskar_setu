@@ -96,6 +96,7 @@ export async function sendEmail({
     const info = await transporter.sendMail({
       from: fromAddress,
       to,
+      replyTo: fromAddress,
       subject,
       text: text || "Please open this email in an HTML-compatible email reader.",
       html,
