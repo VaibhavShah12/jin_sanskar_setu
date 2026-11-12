@@ -141,8 +141,46 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
           </div>
           <div className="col-6 col-md-3">
             <span className="text-muted small d-block">Relationship to Head</span>
-            <strong className="fs-5 text-dark">{member.relationship}</strong>
+            <strong className="fs-5 text-dark">
+              {member.relationship === "DAUGHTER_IN_LAW" ? "Daughter-in-law (पुत्रवधू)" : member.relationship}
+            </strong>
           </div>
+          {member.bloodGroup && (
+            <div className="col-6 col-md-3">
+              <span className="text-muted small d-block">Blood Group</span>
+              <strong className="fs-5 text-danger">
+                🩸 {member.bloodGroup}
+              </strong>
+            </div>
+          )}
+          {member.relationship === "SON" && (
+            <div className="col-6 col-md-3">
+              <span className="text-muted small d-block">Marital Status</span>
+              <strong className="fs-5 text-dark">
+                {member.maritalStatus === "MARRIED" ? "Married" : "Unmarried"}
+              </strong>
+              {member.wifeName && (
+                <div className="small text-primary mt-1">
+                  <i className="bi bi-heart me-1"></i>
+                  Wife: <strong>{member.wifeName}</strong>
+                  {member.wifeContact ? ` (${member.wifeContact})` : ""}
+                </div>
+              )}
+            </div>
+          )}
+          {(member.relationship === "SON" || member.relationship === "DAUGHTER") && member.residenceLocation && (
+            <div className="col-6 col-md-3">
+              <span className="text-muted small d-block">Current Residence</span>
+              <strong className="fs-5 text-dark">
+                <i className="bi bi-geo-alt text-danger me-1"></i>
+                {member.residenceLocation === "IN_PUNE"
+                  ? "In Pune"
+                  : member.residenceLocation === "OUT_OF_PUNE"
+                  ? "Outside Pune / India"
+                  : "Foreign / Abroad"}
+              </strong>
+            </div>
+          )}
           {member.husbandName && (
             <div className="col-6 col-md-3">
               <span className="text-muted small d-block">Husband&apos;s Name</span>
@@ -179,7 +217,10 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
           </div>
           <div className="col-12 col-md-6">
             <span className="text-muted small d-block">Area / Residence</span>
-            <span className="text-secondary">{member.family.area} — {member.family.address}</span>
+            <span className="text-secondary">
+              {member.family.area}
+              {member.family.lane ? ` (Lane: ${member.family.lane})` : ""} — {member.family.address}
+            </span>
           </div>
         </div>
       </div>

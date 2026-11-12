@@ -45,6 +45,7 @@ enum Relationship {
   SPOUSE
   SON
   DAUGHTER
+  DAUGHTER_IN_LAW
   FATHER
   MOTHER
   BROTHER
@@ -201,6 +202,7 @@ model Family {
   normalizedMobile String       @default("") // Stripped of spaces, hyphens, prefixes
   email            String?      // Family Head contact email
   address          String
+  lane             String?      // Lane / Gali / Road / Street (गल्ली / लेन / शेरी)
   area             String
   nativePlace      String?      // Native Village / Mul Gaam (मूल वतन / મૂળ ગામ)
   volunteerName    String?      // Volunteer name who added this family
@@ -259,9 +261,13 @@ model Member {
   isDeceased        Boolean           @default(false)    // Soft-delete for deceased members
   occupation        String?                              // e.g. Service, Business, Retired, Housewife, Student
   educationLevel    String?                              // e.g. Graduate, Post-Graduate, School
+  bloodGroup        String?                              // e.g. A+, B+, AB+, O+, etc.
   interests         String[]          @default([])
   whatsappNumber    String?           // Individual WhatsApp contact number
   husbandName       String?           // Husband's name for married daughter/sister
+  wifeName          String?           // Wife's name for married son
+  wifeContact       String?           // Wife's contact / phone for married son
+  residenceLocation String?           // IN_PUNE, OUT_OF_PUNE, FOREIGN (for son / daughter)
   whatsappConsent          Boolean    @default(false)
   whatsappConsentDate      DateTime?
   whatsappConsentSource    String?    // e.g. "SURVEY_FORM", "VOLUNTEER_VERIFIED", "MEMBER_PORTAL", "ADMIN_UPDATE", "TRUSTEE_UPDATE"

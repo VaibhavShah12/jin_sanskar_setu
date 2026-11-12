@@ -211,6 +211,15 @@ export default function FamilyDetailClient({
               {family.members.length} members
             </span>
           </div>
+          {family.lane && (
+            <div className="col-12 col-sm-6 col-md-3">
+              <span className="text-muted small d-block">Lane / Gali / Road</span>
+              <strong className="fs-6 text-dark">
+                <i className="bi bi-signpost-split text-primary me-1"></i>
+                {family.lane}
+              </strong>
+            </div>
+          )}
           {family.nativePlace && (
             <div className="col-12 col-sm-6 col-md-3">
               <span className="text-muted small d-block">Native Village / Mul Gaam</span>
@@ -326,6 +335,11 @@ export default function FamilyDetailClient({
                       {m.relationship === "HEAD" && (
                         <span className="badge bg-secondary ms-2">Head</span>
                       )}
+                      {m.bloodGroup && (
+                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-2 small">
+                          🩸 {m.bloodGroup}
+                        </span>
+                      )}
                       {m.status === "ARCHIVED" && (
                         <span className="badge bg-secondary ms-1">Archived</span>
                       )}
@@ -349,11 +363,36 @@ export default function FamilyDetailClient({
                     </td>
                     <td className="text-capitalize">{m.gender.toLowerCase().replace(/_/g, " ")}</td>
                     <td>
-                      <div className="fw-medium">{m.relationship}</div>
+                      <div className="fw-medium">
+                        {m.relationship === "DAUGHTER_IN_LAW" ? "Daughter-in-law (पुत्रवधू)" : m.relationship}
+                      </div>
+                      {m.relationship === "SON" && (
+                        <div className="small mt-1">
+                          {m.maritalStatus === "MARRIED" ? (
+                            <span className="text-primary">
+                              <i className="bi bi-heart me-1"></i>
+                              Wife: <strong>{m.wifeName || "—"}</strong>
+                              {m.wifeContact ? ` (${m.wifeContact})` : ""}
+                            </span>
+                          ) : (
+                            <span className="text-muted">Unmarried</span>
+                          )}
+                        </div>
+                      )}
                       {m.husbandName && (
                         <div className="small text-primary mt-1">
                           <i className="bi bi-person-heart me-1"></i>
                           Husband: <strong>{m.husbandName}</strong>
+                        </div>
+                      )}
+                      {(m.relationship === "SON" || m.relationship === "DAUGHTER") && m.residenceLocation && (
+                        <div className="small text-secondary mt-1">
+                          <i className="bi bi-geo-alt text-danger me-1"></i>
+                          {m.residenceLocation === "IN_PUNE"
+                            ? "In Pune"
+                            : m.residenceLocation === "OUT_OF_PUNE"
+                            ? "Outside Pune / India"
+                            : "Foreign / Abroad"}
                         </div>
                       )}
                     </td>
@@ -420,6 +459,11 @@ export default function FamilyDetailClient({
                   </Link>
                   <h6 className="fw-bold text-dark mb-0 mt-1">
                     {m.name} {m.relationship === "HEAD" && <span className="badge bg-secondary ms-1">Head</span>}
+                    {m.bloodGroup && (
+                      <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 small">
+                        🩸 {m.bloodGroup}
+                      </span>
+                    )}
                     {m.status === "ARCHIVED" && <span className="badge bg-secondary ms-1">Archived</span>}
                     {m.occupation && (
                       <span className="badge bg-secondary-subtle text-secondary border ms-1 small">
@@ -427,6 +471,19 @@ export default function FamilyDetailClient({
                       </span>
                     )}
                   </h6>
+                  {m.relationship === "SON" && (
+                    <div className="small mt-1">
+                      {m.maritalStatus === "MARRIED" ? (
+                        <span className="text-primary">
+                          <i className="bi bi-heart me-1"></i>
+                          Wife: <strong>{m.wifeName || "—"}</strong>
+                          {m.wifeContact ? ` (${m.wifeContact})` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-muted">Unmarried</span>
+                      )}
+                    </div>
+                  )}
                   {m.whatsappNumber && (
                     <div className="small text-success mt-1">
                       <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
@@ -438,10 +495,16 @@ export default function FamilyDetailClient({
                       Husband: <strong>{m.husbandName}</strong>
                     </div>
                   )}
+                  {(m.relationship === "SON" || m.relationship === "DAUGHTER") && m.residenceLocation && (
+                    <div className="small text-secondary mt-1">
+                      <i className="bi bi-geo-alt text-danger me-1"></i>
+                      Location: <strong>{m.residenceLocation === "IN_PUNE" ? "In Pune" : m.residenceLocation === "OUT_OF_PUNE" ? "Outside Pune / India" : "Foreign / Abroad"}</strong>
+                    </div>
+                  )}
                 </div>
                 <div className="text-end">
                   <span className="badge bg-light text-secondary border">
-                    {m.relationship} • {calculatedAge} yrs
+                    {m.relationship === "DAUGHTER_IN_LAW" ? "Daughter-in-law" : m.relationship} • {calculatedAge} yrs
                   </span>
                   {dobString && (
                     <div className="small text-muted font-monospace">{dobString}</div>

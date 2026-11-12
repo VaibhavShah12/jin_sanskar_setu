@@ -148,6 +148,7 @@ export const RelationshipEnum = z.enum([
   "SPOUSE",
   "SON",
   "DAUGHTER",
+  "DAUGHTER_IN_LAW",
   "FATHER",
   "MOTHER",
   "BROTHER",
@@ -164,6 +165,7 @@ export const PreferredTimeEnum = z.enum(["MORNING", "AFTERNOON", "EVENING", "NO_
 export const TransportPreferenceEnum = z.enum(["PICK_AND_DROP", "BY_SELF", "NONE"]).optional().nullable();
 
 export const MaritalStatusEnum = z.enum(["UNMARRIED", "MARRIED", "WIDOWED", "DIVORCED"]);
+export const ResidenceLocationEnum = z.enum(["IN_PUNE", "OUT_OF_PUNE", "FOREIGN"]);
 
 export const MemberInputSchema = z
   .object({
@@ -175,6 +177,10 @@ export const MemberInputSchema = z
     relationship: RelationshipEnum,
     maritalStatus: MaritalStatusEnum.default("UNMARRIED"),
     husbandName: z.string().optional().nullable(),
+    wifeName: z.string().optional().nullable(),
+    wifeContact: z.string().optional().nullable(),
+    residenceLocation: z.string().optional().nullable(),
+    bloodGroup: z.string().optional().nullable(),
     pathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     preferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     preferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),
@@ -219,6 +225,23 @@ export const MemberInputSchema = z
         });
       }
     }
+
+    // Son married validation: if married, wife's name is requested
+    if (data.relationship === "SON" && data.maritalStatus === "MARRIED") {
+      if (!data.wifeName || data.wifeName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Wife's name is required for married son (विवाहित पुत्र की पत्नी का नाम आवश्यक है).",
+          path: ["wifeName"],
+        });
+      }
+    }
+
+    // Son or Daughter location: default to IN_PUNE if not set
+    const isSonOrDaughter = data.relationship === "SON" || data.relationship === "DAUGHTER";
+    if (isSonOrDaughter && !data.residenceLocation) {
+      data.residenceLocation = "IN_PUNE";
+    }
   });
 
 export const FamilyFormSchema = z
@@ -231,8 +254,10 @@ export const FamilyFormSchema = z
     headWhatsappNumber: z.string().optional().nullable(),
     headEmail: z.string().min(1, "Head email ID is required").email("Please enter a valid email address (e.g. name@example.com)"),
     address: z.string().min(5, "Address must have at least 5 characters").max(300),
+    lane: z.string().max(150).optional().nullable(),
     area: z.string().min(2, "Area or locality is required").max(100),
     nativePlace: z.string().max(100).optional().nullable(),
+    headBloodGroup: z.string().optional().nullable(),
     sanghId: z.string().min(1, "Please select a Sangh"),
     headOccupation: z.string().optional().nullable(),
     headPathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),

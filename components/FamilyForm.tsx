@@ -34,7 +34,10 @@ export const FORM_TRANSLATIONS = {
     age: "Age",
     gender: "Gender",
     area: "Area / Locality",
+    lane: "Lane / Gali / Road",
     address: "Flat / Building / Street Address",
+    bloodGroup: "Blood Group",
+    residenceLocation: "Current Location",
     nativePlace: "Native Village / Mul Gaam (મૂળ ગામ / मूल वतन)",
     nativePlacePlaceholder: "e.g. Patan, Palanpur, Sirohi, Kutch, Jamnagar",
     nativePlaceHint: "Ancestral hometown for community directory & associations.",
@@ -76,7 +79,10 @@ export const FORM_TRANSLATIONS = {
     age: "उम्र",
     gender: "लिंग",
     area: "क्षेत्र / इलाका",
+    lane: "गली / लेन / मार्ग",
     address: "मकान / बिल्डिंग / गली का पूरा पता",
+    bloodGroup: "रक्त समूह (ब्लड ग्रुप)",
+    residenceLocation: "वर्तमान निवास स्थान",
     nativePlace: "मूल वतन / गाँव (મૂળ ગામ)",
     nativePlacePlaceholder: "उदा. पाटन, पालनपुर, सिरोही, कच्छ, जामनगर",
     nativePlaceHint: "सामुदायिक निर्देशिका और वतन संगठन के लिए पैतृक गाँव।",
@@ -118,7 +124,10 @@ export const FORM_TRANSLATIONS = {
     age: "ઉંમર",
     gender: "જાતિ",
     area: "વિસ્તાર / સોસાયટી",
+    lane: "શેરી / ગલી / માર્ગ",
     address: "ફ્લેટ / મકાન / શેરીનું સરનામું",
+    bloodGroup: "બ્લડ ગ્રુપ",
+    residenceLocation: "હાલનું રહેઠાણ",
     nativePlace: "મૂળ ગામ / વતન",
     nativePlacePlaceholder: "દા.ત. પાટણ, પાલનપુર, સિરોહી, કચ્છ, જામનગર",
     nativePlaceHint: "સમાજ ડિરેક્ટરી અને વતન મંડળ માટે મૂળ વતન.",
@@ -202,8 +211,10 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
     headWhatsappNumber: "",
     headEmail: "",
     address: "",
+    lane: "",
     area: "",
     nativePlace: "",
+    headBloodGroup: "",
     sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
     headOccupation: "",
     headPathshalaStatus: "UNKNOWN",
@@ -263,6 +274,10 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           relationship: "SON",
           maritalStatus: "UNMARRIED",
           husbandName: "",
+          wifeName: "",
+          wifeContact: "",
+          residenceLocation: "IN_PUNE",
+          bloodGroup: "",
           pathshalaStatus: "UNKNOWN",
           preferredDay: "NO_PREFERENCE",
           preferredTime: "NO_PREFERENCE",
@@ -301,12 +316,28 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
         }
       }
 
+      // If relationship is DAUGHTER_IN_LAW, auto-set gender to FEMALE and maritalStatus to MARRIED
+      if (field === "relationship" && value === "DAUGHTER_IN_LAW") {
+        member.gender = "FEMALE";
+        member.maritalStatus = "MARRIED";
+      }
+
       // If relationship changes away from daughter/sister, or maritalStatus becomes UNMARRIED, reset husbandName
       if (field === "relationship" && value !== "DAUGHTER" && value !== "SISTER") {
         member.husbandName = "";
       }
       if (field === "maritalStatus" && value !== "MARRIED") {
         member.husbandName = "";
+      }
+
+      // If relationship changes away from son, or maritalStatus becomes UNMARRIED, reset wife details
+      if (field === "relationship" && value !== "SON") {
+        member.wifeName = "";
+        member.wifeContact = "";
+      }
+      if (field === "maritalStatus" && value !== "MARRIED" && member.relationship === "SON") {
+        member.wifeName = "";
+        member.wifeContact = "";
       }
 
       updated[index] = member;
@@ -390,6 +421,19 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           setErrorMsg(`Married ${label} #${i + 2} (${m.name})'s phone number cannot be the same as the family head's registered number.`);
           return false;
         }
+      }
+
+      // Married son validation
+      if (m.relationship === "SON" && isMarried) {
+        if (!m.wifeName || m.wifeName.trim().length < 2) {
+          setErrorMsg(`Member #${i + 2} (${m.name}) is a married son. Wife's name is required (विवाहित पुत्र की पत्नी का नाम अनिवार्य है).`);
+          return false;
+        }
+      }
+
+      // Default residence location for son / daughter
+      if ((m.relationship === "SON" || m.relationship === "DAUGHTER") && !m.residenceLocation) {
+        m.residenceLocation = "IN_PUNE";
       }
 
       if (mPhone) {
@@ -499,8 +543,12 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       mobile: "",
       headEmail: "",
       address: "",
+      lane: "",
       area: "",
+      nativePlace: "",
+      headBloodGroup: "",
       sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
+      headOccupation: "",
       headPathshalaStatus: "UNKNOWN",
       headPreferredDay: "NO_PREFERENCE",
       headPreferredTime: "NO_PREFERENCE",
@@ -848,6 +896,23 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
               />
             </div>
 
+            {/* Lane / Gali / Street / Road */}
+            <div className="col-12 col-md-6">
+              <label htmlFor="family-lane" className="form-label fw-semibold text-dark">
+                <i className="bi bi-signpost-split text-primary me-1"></i>
+                {t.lane} (Lane / Gali / Road / शेरी)
+              </label>
+              <input
+                type="text"
+                id="family-lane"
+                className="form-control"
+                placeholder="e.g. Lane No. 4, Gali No. 2, Main Street"
+                value={formData.lane || ""}
+                onChange={(e) => setFormData({ ...formData, lane: e.target.value })}
+              />
+              <div className="form-text">Lane, gali, crossroad or street name.</div>
+            </div>
+
             {/* Full Address */}
             <div className="col-12 col-md-6">
               <label htmlFor="family-address" className="form-label fw-semibold text-dark">
@@ -858,7 +923,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                 rows={2}
                 autoComplete="street-address"
                 className="form-control"
-                placeholder="Detailed residential address"
+                placeholder="Flat / House / Building & Detailed address"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 required
@@ -904,6 +969,32 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
               </select>
               <div className="form-text">Primary occupation / profession of family head.</div>
             </div>
+
+            {/* Head Blood Group */}
+            <div className="col-12 col-md-6">
+              <label htmlFor="head-blood-group" className="form-label fw-semibold text-dark">
+                <i className="bi bi-droplet-half text-danger me-1"></i>
+                {t.bloodGroup} (रक्त समूह)
+              </label>
+              <select
+                id="head-blood-group"
+                className="form-select"
+                value={formData.headBloodGroup || ""}
+                onChange={(e) => setFormData({ ...formData, headBloodGroup: e.target.value })}
+              >
+                <option value="">Select Blood Group (ऐच्छिक)</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+                <option value="UNKNOWN">Unknown / पता नहीं</option>
+              </select>
+              <div className="form-text">Emergency medical assistance &amp; Sangh blood donor directory.</div>
+            </div>
           </div>
         </div>
       )}
@@ -929,6 +1020,26 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
               <i className="bi bi-person-plus"></i>
               <span>Add Member</span>
             </button>
+          </div>
+
+          {/* Household Guidelines Notice */}
+          <div className="alert alert-light border border-primary-subtle shadow-xs mb-3">
+            <div className="d-flex align-items-start gap-2">
+              <i className="bi bi-info-circle-fill text-primary fs-5 mt-1 flex-shrink-0"></i>
+              <div className="small text-secondary">
+                <strong className="text-dark d-block mb-1">
+                  पारिवारिक प्रविष्टि नियम (Household Registry Guidelines):
+                </strong>
+                <ul className="mb-0 ps-3">
+                  <li>
+                    <strong>पुत्रवधू (Sons&apos; Wives):</strong> बेटों की पत्नियों को परिवार के सदस्य के रूप में <code>Daughter-in-law (पुत्रवधू / बहू / વહુ)</code> संबंध चुनकर जोड़ा जा सकता है।
+                  </li>
+                  <li>
+                    <strong>दामाद (Daughters&apos; Husbands):</strong> बेटियों के पतियों (दामाद) को इस परिवार के सदस्य के रूप में जोड़ना <strong>मान्य नहीं है</strong> (विवाह पश्चात वे अपने परिवार/संघ से जुड़ते हैं); केवल विवाहित बेटी के विवरण में पति का नाम और संपर्क दर्ज किया जाता है।
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
 
           {/* Member #1: Head of Family Contact Number (Not Compulsory) */}
@@ -988,14 +1099,16 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             <div className="d-flex flex-column gap-3 mb-4">
               {formData.members.map((member, idx) => {
                 const isChild = member.age < 18;
+                const isSon = member.relationship === "SON";
                 const isDaughter = member.relationship === "DAUGHTER";
                 const isSister = member.relationship === "SISTER";
+                const isDaughterInLaw = member.relationship === "DAUGHTER_IN_LAW";
                 const isDaughterOrSister = isDaughter || isSister;
                 const isMarried = member.maritalStatus === "MARRIED";
 
                 return (
-                  <div key={idx} className={`card p-3 border rounded-3 bg-light shadow-sm ${isDaughterOrSister && isMarried ? "border-primary" : ""}`}>
-                    <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                  <div key={idx} className={`card p-3 border rounded-3 bg-light shadow-sm ${(isDaughterOrSister || isSon) && isMarried ? "border-primary" : ""}`}>
+                    <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-1">
                       <div>
                         <span className="badge bg-secondary-subtle text-secondary font-monospace me-1">
                           Member #{idx + 2}
@@ -1004,6 +1117,30 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         {isDaughterOrSister && isMarried && (
                           <span className="badge bg-primary-subtle text-primary border border-primary-subtle ms-1">
                             Married {isDaughter ? "Daughter" : "Sister"}
+                          </span>
+                        )}
+                        {isSon && isMarried && (
+                          <span className="badge bg-primary-subtle text-primary border border-primary-subtle ms-1">
+                            Married Son
+                          </span>
+                        )}
+                        {isDaughterInLaw && (
+                          <span className="badge bg-info-subtle text-info border border-info-subtle ms-1">
+                            Daughter-in-law (पुत्रवधू)
+                          </span>
+                        )}
+                        {member.residenceLocation && (isSon || isDaughter) && (
+                          <span className="badge bg-light text-secondary border ms-1">
+                            {member.residenceLocation === "IN_PUNE"
+                              ? "📍 In Pune"
+                              : member.residenceLocation === "OUT_OF_PUNE"
+                              ? "📍 Outside Pune"
+                              : "✈️ Foreign"}
+                          </span>
+                        )}
+                        {member.bloodGroup && (
+                          <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">
+                            🩸 {member.bloodGroup}
                           </span>
                         )}
                       </div>
@@ -1099,19 +1236,77 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                           value={member.relationship}
                           onChange={(e) => updateMember(idx, "relationship", e.target.value as any)}
                         >
-                          <option value="SPOUSE">Spouse</option>
-                          <option value="SON">Son</option>
-                          <option value="DAUGHTER">Daughter</option>
-                          <option value="FATHER">Father</option>
-                          <option value="MOTHER">Mother</option>
-                          <option value="BROTHER">Brother</option>
-                          <option value="SISTER">Sister</option>
-                          <option value="GRANDFATHER">Grandfather</option>
-                          <option value="GRANDMOTHER">Grandmother</option>
-                          <option value="GRANDCHILD">Grandchild</option>
-                          <option value="OTHER">Other</option>
+                          <option value="SPOUSE">Spouse (पति / पत्नी)</option>
+                          <option value="SON">Son (पुत्र / बेटा)</option>
+                          <option value="DAUGHTER">Daughter (पुत्री / बेटी)</option>
+                          <option value="DAUGHTER_IN_LAW">Daughter-in-law (पुत्रवधू / बहू / વહુ)</option>
+                          <option value="FATHER">Father (पिता)</option>
+                          <option value="MOTHER">Mother (माता)</option>
+                          <option value="BROTHER">Brother (भाई)</option>
+                          <option value="SISTER">Sister (बहन)</option>
+                          <option value="GRANDFATHER">Grandfather (दादा / नाना)</option>
+                          <option value="GRANDMOTHER">Grandmother (दादी / नानी)</option>
+                          <option value="GRANDCHILD">Grandchild (पोता / पोती)</option>
+                          <option value="OTHER">Other (अन्य)</option>
                         </select>
                       </div>
+
+                      {/* Marital Status for Son */}
+                      {isSon && (
+                        <div className="col-12 col-sm-6 col-md-3">
+                          <label className="form-label small fw-semibold text-dark mb-1">
+                            Marital Status (विवाह स्थिति) <span className="text-danger">*</span>
+                          </label>
+                          <select
+                            className="form-select form-select-sm fw-semibold"
+                            value={member.maritalStatus || "UNMARRIED"}
+                            onChange={(e) => updateMember(idx, "maritalStatus", e.target.value as any)}
+                          >
+                            <option value="UNMARRIED">Unmarried (अविवाहित)</option>
+                            <option value="MARRIED">Married (विवाहित)</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* If Son is Married: Ask Wife's Name & Contact Number */}
+                      {isSon && isMarried && (
+                        <>
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              <i className="bi bi-heart text-danger me-1"></i>
+                              Wife&apos;s Name (पत्नी का नाम) <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              className="form-control form-control-sm border-primary"
+                              placeholder="Son's wife full name"
+                              value={member.wifeName || ""}
+                              onChange={(e) => updateMember(idx, "wifeName", e.target.value)}
+                              required
+                            />
+                            <div className="form-text small text-muted">
+                              Can also be registered as a member (Daughter-in-law).
+                            </div>
+                          </div>
+
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              <i className="bi bi-telephone text-primary me-1"></i>
+                              Wife&apos;s Contact Number
+                              <span className="text-muted fw-normal ms-1">(Optional)</span>
+                            </label>
+                            <input
+                              type="tel"
+                              inputMode="numeric"
+                              maxLength={15}
+                              className="form-control form-control-sm"
+                              placeholder="Wife's contact number (optional)"
+                              value={member.wifeContact || ""}
+                              onChange={(e) => updateMember(idx, "wifeContact", e.target.value)}
+                            />
+                          </div>
+                        </>
+                      )}
 
                       {/* Marital Status for Daughter or Sister */}
                       {isDaughterOrSister && (
@@ -1185,6 +1380,49 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                           />
                         </div>
                       )}
+
+                      {/* Current Residence Location (Son or Daughter) */}
+                      {(isSon || isDaughter) && (
+                        <div className="col-12 col-sm-6 col-md-3">
+                          <label className="form-label small fw-semibold text-dark mb-1">
+                            <i className="bi bi-geo-alt text-danger me-1"></i>
+                            {t.residenceLocation} (वर्तमान निवास) <span className="text-danger">*</span>
+                          </label>
+                          <select
+                            className="form-select form-select-sm fw-medium"
+                            value={member.residenceLocation || "IN_PUNE"}
+                            onChange={(e) => updateMember(idx, "residenceLocation", e.target.value)}
+                          >
+                            <option value="IN_PUNE">📍 In Pune (पुणे में / પુણેમાં)</option>
+                            <option value="OUT_OF_PUNE">📍 Outside Pune / India (पुणे के बाहर / ભારત)</option>
+                            <option value="FOREIGN">✈️ Foreign / Abroad (विदेश / વિદેશ / NRI)</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Member Blood Group */}
+                      <div className="col-12 col-sm-6 col-md-3">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          <i className="bi bi-droplet-half text-danger me-1"></i>
+                          {t.bloodGroup} (रक्त समूह)
+                        </label>
+                        <select
+                          className="form-select form-select-sm"
+                          value={member.bloodGroup || ""}
+                          onChange={(e) => updateMember(idx, "bloodGroup", e.target.value)}
+                        >
+                          <option value="">Select Blood Group</option>
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                          <option value="UNKNOWN">Unknown / पता नहीं</option>
+                        </select>
+                      </div>
 
                       {/* Member Occupation */}
                       <div className="col-12 col-sm-6 col-md-3">
@@ -1344,6 +1582,20 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                 <span className="text-muted d-block">{t.area}:</span>
                 <strong>{formData.area}</strong>
               </div>
+              {formData.lane && (
+                <div className="col-6 col-md-4">
+                  <span className="text-muted d-block">{t.lane}:</span>
+                  <strong>{formData.lane}</strong>
+                </div>
+              )}
+              {formData.headBloodGroup && (
+                <div className="col-6 col-md-4">
+                  <span className="text-muted d-block">{t.bloodGroup}:</span>
+                  <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
+                    🩸 {formData.headBloodGroup}
+                  </span>
+                </div>
+              )}
               <div className="col-6 col-md-4">
                 <span className="text-muted d-block">{t.nativePlace}:</span>
                 <strong>{formData.nativePlace || "—"}</strong>
@@ -1388,6 +1640,11 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                     <td><strong>1</strong></td>
                     <td className="fw-bold">
                       {formData.headName} <span className="badge bg-secondary ms-1">Head</span>
+                      {formData.headBloodGroup && (
+                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">
+                          🩸 {formData.headBloodGroup}
+                        </span>
+                      )}
                       {(formData.headWhatsappNumber || formData.mobile) && (
                         <div className="small text-success fw-normal">
                           <i className="bi bi-whatsapp me-1"></i>{formData.headWhatsappNumber || formData.mobile}
@@ -1411,7 +1668,11 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                     </td>
                   </tr>
                   {formData.members.map((m, idx) => {
-                    const isDaughterOrSister = m.relationship === "DAUGHTER" || m.relationship === "SISTER";
+                    const isSon = m.relationship === "SON";
+                    const isDaughter = m.relationship === "DAUGHTER";
+                    const isSister = m.relationship === "SISTER";
+                    const isDaughterInLaw = m.relationship === "DAUGHTER_IN_LAW";
+                    const isDaughterOrSister = isDaughter || isSister;
                     const isMarried = m.maritalStatus === "MARRIED";
 
                     return (
@@ -1419,6 +1680,11 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         <td>{idx + 2}</td>
                         <td className="fw-semibold">
                           {m.name}
+                          {m.bloodGroup && (
+                            <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">
+                              🩸 {m.bloodGroup}
+                            </span>
+                          )}
                           {m.whatsappNumber && (
                             <div className="small text-success fw-normal">
                               <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
@@ -1435,6 +1701,25 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         <td>{m.gender}</td>
                         <td>
                           <div>{m.relationship}</div>
+                          {isDaughterInLaw && (
+                            <div className="small mt-1">
+                              <span className="badge bg-info-subtle text-info border border-info-subtle">
+                                Daughter-in-law (पुत्रवधू)
+                              </span>
+                            </div>
+                          )}
+                          {isSon && (
+                            <div className="small mt-1">
+                              {isMarried ? (
+                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                  Married • Wife: {m.wifeName || "—"}
+                                  {m.wifeContact ? ` (${m.wifeContact})` : ""}
+                                </span>
+                              ) : (
+                                <span className="badge bg-light text-muted border">Unmarried</span>
+                              )}
+                            </div>
+                          )}
                           {isDaughterOrSister && (
                             <div className="small mt-1">
                               {isMarried ? (
@@ -1444,6 +1729,16 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                               ) : (
                                 <span className="badge bg-light text-muted border">Unmarried</span>
                               )}
+                            </div>
+                          )}
+                          {(isSon || isDaughter) && m.residenceLocation && (
+                            <div className="small text-secondary mt-1">
+                              <i className="bi bi-geo-alt text-danger me-1"></i>
+                              {m.residenceLocation === "IN_PUNE"
+                                ? "In Pune"
+                                : m.residenceLocation === "OUT_OF_PUNE"
+                                ? "Outside Pune / India"
+                                : "Foreign / Abroad"}
                             </div>
                           )}
                         </td>
