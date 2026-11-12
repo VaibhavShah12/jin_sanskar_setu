@@ -304,6 +304,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           wifeContact: "",
           residenceLocation: "IN_PUNE",
           bloodGroup: "",
+          children: [],
           pathshalaStatus: "UNKNOWN",
           preferredDay: "NO_PREFERENCE",
           preferredTime: "NO_PREFERENCE",
@@ -321,6 +322,59 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       ...prev,
       members: prev.members.filter((_, idx) => idx !== index),
     }));
+  };
+
+  const addChildToMember = (memberIdx: number) => {
+    setFormData((prev) => {
+      const updated = [...prev.members];
+      const member = { ...updated[memberIdx] };
+      const children = Array.isArray(member.children) ? [...member.children] : [];
+      children.push({
+        name: "",
+        dateOfBirth: "",
+        age: 5,
+        gender: "MALE",
+        bloodGroup: "",
+      });
+      member.children = children;
+      updated[memberIdx] = member;
+      return { ...prev, members: updated };
+    });
+  };
+
+  const removeChildFromMember = (memberIdx: number, childIdx: number) => {
+    setFormData((prev) => {
+      const updated = [...prev.members];
+      const member = { ...updated[memberIdx] };
+      if (!member.children) return prev;
+      member.children = member.children.filter((_, idx) => idx !== childIdx);
+      updated[memberIdx] = member;
+      return { ...prev, members: updated };
+    });
+  };
+
+  const updateMemberChild = (memberIdx: number, childIdx: number, field: string, value: any) => {
+    setFormData((prev) => {
+      const updated = [...prev.members];
+      const member = { ...updated[memberIdx] };
+      if (!member.children) return prev;
+      const children = [...member.children];
+      const child = { ...children[childIdx], [field]: value };
+
+      if (field === "dateOfBirth" && value && typeof value === "string") {
+        try {
+          const calc = calculateAgeFromDob(value);
+          if (calc !== null) {
+            child.age = calc;
+          }
+        } catch {}
+      }
+
+      children[childIdx] = child;
+      member.children = children;
+      updated[memberIdx] = member;
+      return { ...prev, members: updated };
+    });
   };
 
   const updateMember = (index: number, field: keyof MemberInput, value: any) => {
@@ -427,7 +481,8 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
         return false;
       }
 
-      // Married daughter or married sister validation
+      // Member relationships
+      const isSon = m.relationship === "SON";
       const isDaughter = m.relationship === "DAUGHTER";
       const isSister = m.relationship === "SISTER";
       const isMarried = m.maritalStatus === "MARRIED";
@@ -458,6 +513,25 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
         if (!m.wifeName || m.wifeName.trim().length < 2) {
           setErrorMsg(`Member #${i + 2} (${m.name}) is a married son. Wife's name is required (विवाहित पुत्र की पत्नी का नाम अनिवार्य है).`);
           return false;
+        }
+      }
+
+      // Children validation if any children added under married son or married daughter
+      if ((isSon || isDaughter) && isMarried && m.children && m.children.length > 0) {
+        for (let c = 0; c < m.children.length; c++) {
+          const ch = m.children[c];
+          if (!ch.name || ch.name.trim().length < 2) {
+            setErrorMsg(`Please enter a valid name (at least 2 letters) for child #${c + 1} of member #${i + 2} (${m.name || "Member"}).`);
+            return false;
+          }
+          if (ch.dateOfBirth && ch.dateOfBirth > todayStr) {
+            setErrorMsg(`Date of birth for child #${c + 1} (${ch.name}) of member #${i + 2} cannot be in the future.`);
+            return false;
+          }
+          if (ch.age === undefined || ch.age < 0 || ch.age > 100) {
+            setErrorMsg(`Please enter a valid age (0-100) for child #${c + 1} (${ch.name}) of member #${i + 2}.`);
+            return false;
+          }
         }
       }
 
@@ -1526,6 +1600,158 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         </select>
                       </div>
                     </div>
+
+                    {/* Nested Children Section for Married Son or Married Daughter */}
+                    {(isSon || isDaughter) && isMarried && (
+                      <div className="mt-3 p-3 bg-white border border-info-subtle rounded-3 shadow-xs">
+                        <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                          <div>
+                            <div className="d-flex align-items-center gap-2 flex-wrap">
+                              <span className="fw-bold text-dark d-flex align-items-center gap-1">
+                                <i className="bi bi-people-fill text-info"></i>
+                                Children of {member.name ? member.name : isSon ? "Son" : "Daughter"} (बच्चे / સંતાનો)
+                              </span>
+                              <span className="badge bg-info-subtle text-info border border-info-subtle small fw-normal">
+                                Auto-mapped as Grandchild (पोता / पोती / नाती) to Family Head
+                              </span>
+                            </div>
+                            <div className="text-muted small">
+                              Enter children here; they will automatically be registered as grandchildren of the family head with their own generated Member ID.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => addChildToMember(idx)}
+                            className="btn btn-outline-info btn-sm d-flex align-items-center gap-1 shadow-xs"
+                          >
+                            <i className="bi bi-plus-circle"></i>
+                            <span>+ Add Child (बच्चा जोड़ें)</span>
+                          </button>
+                        </div>
+
+                        {(!member.children || member.children.length === 0) ? (
+                          <div className="text-muted small py-2 px-3 border border-dashed rounded-2 bg-light-subtle d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <span>
+                              <i className="bi bi-info-circle me-1 text-info"></i>
+                              No children added yet. If this {isSon ? "married son" : "married daughter"} has children, click &quot;+ Add Child&quot; to add them under the parents.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => addChildToMember(idx)}
+                              className="btn btn-link btn-sm text-info p-0 text-decoration-none fw-semibold"
+                            >
+                              + Add Child Now
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="d-flex flex-column gap-2 mt-2">
+                            {member.children.map((child, cIdx) => (
+                              <div key={cIdx} className="p-3 border rounded-2 bg-light-subtle shadow-xs">
+                                <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="badge bg-info font-monospace small">Child #{cIdx + 1}</span>
+                                    <span className="small text-muted">
+                                      Grandchild of {formData.headName || "Head"}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeChildFromMember(idx, cIdx)}
+                                    className="btn btn-link text-danger p-0 small text-decoration-none d-flex align-items-center gap-1"
+                                    title="Remove child"
+                                  >
+                                    <i className="bi bi-trash"></i> Remove Child
+                                  </button>
+                                </div>
+                                <div className="row g-2">
+                                  <div className="col-12 col-sm-6 col-md-3">
+                                    <label className="form-label small fw-semibold text-dark mb-1">
+                                      Child Full Name <span className="text-danger">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      className="form-control form-control-sm"
+                                      placeholder="Child's full name"
+                                      value={child.name}
+                                      onChange={(e) => updateMemberChild(idx, cIdx, "name", e.target.value)}
+                                      required
+                                    />
+                                  </div>
+                                  <div className="col-6 col-sm-6 col-md-3">
+                                    <label className="form-label small fw-semibold text-dark mb-1">Date of Birth</label>
+                                    <input
+                                      type="date"
+                                      max={todayStr}
+                                      className="form-control form-control-sm"
+                                      value={child.dateOfBirth || ""}
+                                      onChange={(e) => updateMemberChild(idx, cIdx, "dateOfBirth", e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="col-6 col-sm-4 col-md-2">
+                                    <label className="form-label small fw-semibold text-dark mb-1">
+                                      Age <span className="text-danger">*</span>
+                                      {child.dateOfBirth && (
+                                        <span className="badge bg-success-subtle text-success ms-1" style={{ fontSize: "0.6rem" }}>Auto</span>
+                                      )}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min="0"
+                                      max="100"
+                                      className={`form-control form-control-sm ${child.dateOfBirth ? "bg-white text-muted" : ""}`}
+                                      value={child.age}
+                                      readOnly={Boolean(child.dateOfBirth)}
+                                      title={child.dateOfBirth ? "Calculated from Date of Birth" : "Enter age"}
+                                      onChange={(e) => {
+                                        if (!child.dateOfBirth) {
+                                          updateMemberChild(idx, cIdx, "age", parseInt(e.target.value) || 0);
+                                        }
+                                      }}
+                                      required
+                                    />
+                                  </div>
+                                  <div className="col-6 col-sm-4 col-md-2">
+                                    <label className="form-label small fw-semibold text-dark mb-1">Gender</label>
+                                    <select
+                                      className="form-select form-select-sm"
+                                      value={child.gender}
+                                      onChange={(e) => updateMemberChild(idx, cIdx, "gender", e.target.value)}
+                                    >
+                                      <option value="MALE">Male (बालक)</option>
+                                      <option value="FEMALE">Female (बालिका)</option>
+                                      <option value="OTHER">Other</option>
+                                    </select>
+                                  </div>
+                                  <div className="col-6 col-sm-4 col-md-2">
+                                    <label className="form-label small fw-semibold text-dark mb-1">
+                                      <i className="bi bi-droplet-half text-danger me-1"></i>
+                                      Blood Group
+                                    </label>
+                                    <select
+                                      className="form-select form-select-sm"
+                                      value={child.bloodGroup || ""}
+                                      onChange={(e) => updateMemberChild(idx, cIdx, "bloodGroup", e.target.value)}
+                                    >
+                                      <option value="">Select (ऐच्छिक)</option>
+                                      <option value="A+">A+</option>
+                                      <option value="A-">A-</option>
+                                      <option value="B+">B+</option>
+                                      <option value="B-">B-</option>
+                                      <option value="AB+">AB+</option>
+                                      <option value="AB-">AB-</option>
+                                      <option value="O+">O+</option>
+                                      <option value="O-">O-</option>
+                                      <option value="UNKNOWN">Unknown</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1710,7 +1936,7 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
 
           <div className="card p-3 border rounded-3 mb-4">
             <h6 className="fw-bold text-dark border-bottom pb-2 mb-2">
-              {t.allMembers} ({1 + formData.members.length} Total)
+              {t.allMembers} ({1 + formData.members.reduce((acc, m) => acc + 1 + (m.children ? m.children.length : 0), 0)} Total)
             </h6>
             <div className="table-responsive">
               <table className="table table-sm align-middle mb-0">
@@ -1765,80 +1991,123 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                     const isMarried = m.maritalStatus === "MARRIED";
 
                     return (
-                      <tr key={idx}>
-                        <td>{idx + 2}</td>
-                        <td className="fw-semibold">
-                          {m.name}
-                          {m.bloodGroup && (
-                            <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">
-                              🩸 {m.bloodGroup}
-                            </span>
-                          )}
-                          {m.whatsappNumber && (
-                            <div className="small text-success fw-normal">
-                              <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <span className="fw-semibold">{m.age} yrs</span>
-                          {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}
-                          {m.dateOfBirth && (
-                            <div className="small text-muted font-monospace">{m.dateOfBirth}</div>
-                          )}
-                        </td>
-                        <td>{m.gender}</td>
-                        <td>
-                          <div>{m.relationship}</div>
-                          {isDaughterInLaw && (
-                            <div className="small mt-1">
-                              <span className="badge bg-info-subtle text-info border border-info-subtle">
-                                Daughter-in-law (पुत्रवधू)
+                      <React.Fragment key={idx}>
+                        <tr>
+                          <td>{idx + 2}</td>
+                          <td className="fw-semibold">
+                            {m.name}
+                            {m.bloodGroup && (
+                              <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">
+                                🩸 {m.bloodGroup}
                               </span>
-                            </div>
-                          )}
-                          {isSon && (
-                            <div className="small mt-1">
-                              {isMarried ? (
-                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
-                                  Married • Wife: {m.wifeName || "—"}
-                                  {m.wifeContact ? ` (${m.wifeContact})` : ""}
+                            )}
+                            {m.whatsappNumber && (
+                              <div className="small text-success fw-normal">
+                                <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <span className="fw-semibold">{m.age} yrs</span>
+                            {m.age < 18 && <span className="badge bg-warning text-dark ms-1">Child</span>}
+                            {m.dateOfBirth && (
+                              <div className="small text-muted font-monospace">{m.dateOfBirth}</div>
+                            )}
+                          </td>
+                          <td>{m.gender}</td>
+                          <td>
+                            <div>{m.relationship}</div>
+                            {isDaughterInLaw && (
+                              <div className="small mt-1">
+                                <span className="badge bg-info-subtle text-info border border-info-subtle">
+                                  Daughter-in-law (पुत्रवधू)
                                 </span>
-                              ) : (
-                                <span className="badge bg-light text-muted border">Unmarried</span>
-                              )}
-                            </div>
-                          )}
-                          {isDaughterOrSister && (
-                            <div className="small mt-1">
-                              {isMarried ? (
-                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
-                                  Married • Husband: {m.husbandName || "—"}
+                              </div>
+                            )}
+                            {isSon && (
+                              <div className="small mt-1">
+                                {isMarried ? (
+                                  <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                    Married • Wife: {m.wifeName || "—"}
+                                    {m.wifeContact ? ` (${m.wifeContact})` : ""}
+                                  </span>
+                                ) : (
+                                  <span className="badge bg-light text-muted border">Unmarried</span>
+                                )}
+                              </div>
+                            )}
+                            {isDaughterOrSister && (
+                              <div className="small mt-1">
+                                {isMarried ? (
+                                  <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                    Married • Husband: {m.husbandName || "—"}
+                                  </span>
+                                ) : (
+                                  <span className="badge bg-light text-muted border">Unmarried</span>
+                                )}
+                              </div>
+                            )}
+                            {(isSon || isDaughter) && m.residenceLocation && (
+                              <div className="small text-secondary mt-1">
+                                <i className="bi bi-geo-alt text-danger me-1"></i>
+                                {m.residenceLocation === "IN_PUNE"
+                                  ? "In Pune (पुणे में)"
+                                  : m.residenceLocation === "OUT_OF_PUNE"
+                                  ? "Outside Pune / India (पुणे के बाहर)"
+                                  : "✈️ Foreign / Abroad (विदेश / NRI)"}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {m.occupation ? (
+                              <span className="badge bg-secondary-subtle text-dark border">
+                                {getOccupationLabel(m.occupation, t)}
+                              </span>
+                            ) : "—"}
+                          </td>
+                        </tr>
+
+                        {/* Grandchildren sub-rows under this married son or daughter */}
+                        {m.children && m.children.length > 0 && m.children.map((child, cIdx) => (
+                          <tr key={`child-${idx}-${cIdx}`} className="table-light">
+                            <td className="text-center text-muted">
+                              <i className="bi bi-arrow-return-right"></i>
+                            </td>
+                            <td className="ps-3 fw-medium">
+                              <div className="d-flex align-items-center gap-1 flex-wrap">
+                                <span>{child.name}</span>
+                                <span className="badge bg-info-subtle text-info border border-info-subtle">
+                                  Grandchild (पोता / पोती / नाती)
                                 </span>
-                              ) : (
-                                <span className="badge bg-light text-muted border">Unmarried</span>
+                                {child.bloodGroup && (
+                                  <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                    🩸 {child.bloodGroup}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="small text-muted mt-1">
+                                Child of {m.name} • Auto-mapped to Family Head
+                              </div>
+                            </td>
+                            <td>
+                              <span className="fw-semibold">{child.age} yrs</span>
+                              <span className="badge bg-warning text-dark ms-1">Child</span>
+                              {child.dateOfBirth && (
+                                <div className="small text-muted font-monospace">{child.dateOfBirth}</div>
                               )}
-                            </div>
-                          )}
-                          {(isSon || isDaughter) && m.residenceLocation && (
-                            <div className="small text-secondary mt-1">
-                              <i className="bi bi-geo-alt text-danger me-1"></i>
-                              {m.residenceLocation === "IN_PUNE"
-                                ? "In Pune"
-                                : m.residenceLocation === "OUT_OF_PUNE"
-                                ? "Outside Pune / India"
-                                : "Foreign / Abroad"}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          {m.occupation ? (
-                            <span className="badge bg-secondary-subtle text-dark border">
-                              {getOccupationLabel(m.occupation, t)}
-                            </span>
-                          ) : "—"}
-                        </td>
-                      </tr>
+                            </td>
+                            <td>{child.gender}</td>
+                            <td>
+                              <span className="badge bg-secondary-subtle text-secondary font-monospace">
+                                GRANDCHILD (पोता / पोती)
+                              </span>
+                            </td>
+                            <td>
+                              <span className="text-muted small">Student</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>

@@ -167,6 +167,16 @@ export const TransportPreferenceEnum = z.enum(["PICK_AND_DROP", "BY_SELF", "NONE
 export const MaritalStatusEnum = z.enum(["UNMARRIED", "MARRIED", "WIDOWED", "DIVORCED"]);
 export const ResidenceLocationEnum = z.enum(["IN_PUNE", "OUT_OF_PUNE", "FOREIGN"]);
 
+export const ChildInputSchema = z.object({
+  name: z.string().min(2, "Child name must have at least 2 characters").max(100),
+  dateOfBirth: z.string().optional().nullable(),
+  age: z.coerce.number().int().min(0, "Age cannot be negative").max(100, "Age must be valid"),
+  gender: GenderEnum.default("MALE"),
+  bloodGroup: z.string().optional().nullable(),
+});
+
+export type ChildInput = z.infer<typeof ChildInputSchema>;
+
 export const MemberInputSchema = z
   .object({
     id: z.string().optional(),
@@ -182,6 +192,7 @@ export const MemberInputSchema = z
     residenceLocation: z.string().optional().nullable(),
     bloodGroup: z.string().optional().nullable(),
     sect: z.string().optional().nullable(),
+    children: z.array(ChildInputSchema).optional().nullable(),
     pathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     preferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     preferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),

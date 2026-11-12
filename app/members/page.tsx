@@ -15,6 +15,7 @@ interface MembersPageProps {
     sanghId?: string;
     interest?: string;
     isChild?: string;
+    location?: string;
   };
 }
 
@@ -27,35 +28,49 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
   const requestedSanghId = searchParams.sanghId || undefined;
   const interest = searchParams.interest || undefined;
   const isChild = searchParams.isChild === "true";
+  const location = searchParams.location || "present"; // Default: only members present in Sangh / India
 
   const sanghFilter = getSanghAccessFilter(user, requestedSanghId);
 
-  const searchFilter = q
-    ? {
-        OR: [
-          { memberId: { contains: q, mode: "insensitive" as const } },
-          { name: { contains: q, mode: "insensitive" as const } },
-          { family: { familyId: { contains: q, mode: "insensitive" as const } } },
-          { family: { headName: { contains: q, mode: "insensitive" as const } } },
-        ],
-      }
-    : {};
+  const andConditions: any[] = [{ status: "ACTIVE" }, sanghFilter];
 
-  const whereClause: any = {
-    status: "ACTIVE",
-    ...sanghFilter,
-    ...searchFilter,
-  };
+  if (q) {
+    andConditions.push({
+      OR: [
+        { memberId: { contains: q, mode: "insensitive" as const } },
+        { name: { contains: q, mode: "insensitive" as const } },
+        { family: { familyId: { contains: q, mode: "insensitive" as const } } },
+        { family: { headName: { contains: q, mode: "insensitive" as const } } },
+      ],
+    });
+  }
 
   if (interest) {
-    whereClause.interests = { has: interest };
+    andConditions.push({ interests: { has: interest } });
   }
 
   if (isChild) {
-    whereClause.age = { lt: 18 };
+    andConditions.push({ age: { lt: 18 } });
   }
 
-  const [members, totalCount, sanghs] = await Promise.all([
+  // Location filter:
+  // "present" (DEFAULT): Only members present in the Sangh / not in foreign
+  // "foreign": Only members abroad / foreign (NRI)
+  // "all": All members without location filtering
+  if (location === "foreign") {
+    andConditions.push({ residenceLocation: "FOREIGN" });
+  } else if (location === "all") {
+    // No location restriction
+  } else {
+    // "present" (Default view)
+    andConditions.push({
+      OR: [{ residenceLocation: null }, { residenceLocation: { not: "FOREIGN" } }],
+    });
+  }
+
+  const whereClause = { AND: andConditions };
+
+  const [members, totalCount, sanghs, presentCount, foreignCount, allCount] = await Promise.all([
     prisma.member.findMany({
       where: whereClause,
       include: {
@@ -71,6 +86,26 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
       where: user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId, active: true } : { active: true },
       orderBy: { name: "asc" },
     }),
+    prisma.member.count({
+      where: {
+        status: "ACTIVE",
+        ...sanghFilter,
+        OR: [{ residenceLocation: null }, { residenceLocation: { not: "FOREIGN" } }],
+      },
+    }),
+    prisma.member.count({
+      where: {
+        status: "ACTIVE",
+        ...sanghFilter,
+        residenceLocation: "FOREIGN",
+      },
+    }),
+    prisma.member.count({
+      where: {
+        status: "ACTIVE",
+        ...sanghFilter,
+      },
+    }),
   ]);
 
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -82,7 +117,15 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
         <div>
           <h1 className="h3 fw-bold text-dark mb-1">Members Directory</h1>
           <p className="text-muted small mb-0">
-            Registered Sangh community members • Total active members: {totalCount}
+            Registered Sangh community members • Showing:{" "}
+            <strong>
+              {location === "foreign"
+                ? "Members Abroad (In Foreign / NRI)"
+                : location === "all"
+                ? "All Members"
+                : "Members Present in Sangh (At Present)"}
+            </strong>{" "}
+            ({totalCount} found)
           </p>
         </div>
         {user.role !== "TRUSTEE" && (
@@ -93,9 +136,55 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
         )}
       </div>
 
+      {/* Location View Tabs */}
+      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <Link
+          href={`/members?location=present&sanghId=${requestedSanghId || ""}&q=${encodeURIComponent(q)}&interest=${interest || ""}`}
+          className={`btn btn-sm d-flex align-items-center gap-1 ${
+            location === "present"
+              ? "btn-primary shadow-xs"
+              : "btn-outline-secondary bg-white"
+          }`}
+        >
+          <i className="bi bi-geo-alt-fill"></i>
+          <span>📍 Present in Sangh ({presentCount})</span>
+          {location === "present" && (
+            <span className="badge bg-white text-primary ms-1 small" style={{ fontSize: "0.65rem" }}>
+              Default
+            </span>
+          )}
+        </Link>
+
+        <Link
+          href={`/members?location=foreign&sanghId=${requestedSanghId || ""}&q=${encodeURIComponent(q)}&interest=${interest || ""}`}
+          className={`btn btn-sm d-flex align-items-center gap-1 ${
+            location === "foreign"
+              ? "btn-danger shadow-xs text-white"
+              : "btn-outline-secondary bg-white"
+          }`}
+        >
+          <i className="bi bi-airplane-fill"></i>
+          <span>✈️ In Foreign / NRI ({foreignCount})</span>
+        </Link>
+
+        <Link
+          href={`/members?location=all&sanghId=${requestedSanghId || ""}&q=${encodeURIComponent(q)}&interest=${interest || ""}`}
+          className={`btn btn-sm d-flex align-items-center gap-1 ${
+            location === "all"
+              ? "btn-dark shadow-xs"
+              : "btn-outline-secondary bg-white"
+          }`}
+        >
+          <i className="bi bi-people-fill"></i>
+          <span>👥 All Members ({allCount})</span>
+        </Link>
+      </div>
+
       {/* Filter Bar */}
       <div className="card-clean p-3 mb-4 bg-white">
         <form method="GET" action="/members" className="row g-2 align-items-center">
+          <input type="hidden" name="location" value={location} />
+
           <div className="col-12 col-md-4">
             <input
               type="text"
@@ -141,7 +230,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
             <button type="submit" className="btn btn-primary w-100">
               Filter
             </button>
-            {q || requestedSanghId || interest ? (
+            {q || requestedSanghId || interest || location !== "present" ? (
               <Link href="/members" className="btn btn-outline-secondary">
                 Reset
               </Link>
@@ -191,10 +280,30 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                           </Link>
                         </td>
                         <td className="fw-semibold text-dark">
-                          {m.name}
-                          {m.relationship === "HEAD" && (
-                            <span className="badge bg-secondary ms-1">Head</span>
-                          )}
+                          <div>{m.name}</div>
+                          <div className="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                            {m.relationship === "HEAD" && (
+                              <span className="badge bg-secondary">Head</span>
+                            )}
+                            {m.bloodGroup && (
+                              <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                🩸 {m.bloodGroup}
+                              </span>
+                            )}
+                            {m.residenceLocation === "FOREIGN" ? (
+                              <span className="badge bg-danger text-white">
+                                <i className="bi bi-airplane-fill me-1"></i>In Foreign (NRI)
+                              </span>
+                            ) : m.residenceLocation === "OUT_OF_PUNE" ? (
+                              <span className="badge bg-secondary-subtle text-secondary border">
+                                📍 Outside Pune
+                              </span>
+                            ) : m.residenceLocation === "IN_PUNE" ? (
+                              <span className="badge bg-success-subtle text-success border border-success-subtle">
+                                📍 In Pune
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td>
                           <span className="fw-semibold">{calculatedAge} yrs</span>
@@ -204,7 +313,15 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                           )}
                         </td>
                         <td className="text-capitalize">{m.gender.toLowerCase()}</td>
-                        <td>{m.relationship}</td>
+                        <td>
+                          <div className="fw-medium">
+                            {m.relationship === "DAUGHTER_IN_LAW"
+                              ? "Daughter-in-law"
+                              : m.relationship === "GRANDCHILD"
+                              ? "Grandchild (पोता/पोती)"
+                              : m.relationship}
+                          </div>
+                        </td>
                         <td>
                           <Link href={`/families/${m.familyId}`} className="font-monospace text-decoration-none text-secondary">
                             {m.family.familyId}
@@ -270,6 +387,26 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                     <div>
                       Age: {calculatedAge} yrs {dobString && `(DOB: ${dobString})`} • Gender: {m.gender} • Rel: {m.relationship}
                     </div>
+                    <div className="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                      {m.bloodGroup && (
+                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
+                          🩸 {m.bloodGroup}
+                        </span>
+                      )}
+                      {m.residenceLocation === "FOREIGN" ? (
+                        <span className="badge bg-danger text-white">
+                          <i className="bi bi-airplane-fill me-1"></i>In Foreign (NRI)
+                        </span>
+                      ) : m.residenceLocation === "OUT_OF_PUNE" ? (
+                        <span className="badge bg-secondary-subtle text-secondary border">
+                          📍 Outside Pune
+                        </span>
+                      ) : m.residenceLocation === "IN_PUNE" ? (
+                        <span className="badge bg-success-subtle text-success border border-success-subtle">
+                          📍 In Pune
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {m.interests && m.interests.length > 0 && (
@@ -310,7 +447,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
               <div className="btn-group">
                 {page > 1 ? (
                   <Link
-                    href={`/members?page=${page - 1}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&interest=${interest || ""}`}
+                    href={`/members?page=${page - 1}&location=${location}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&interest=${interest || ""}`}
                     className="btn btn-outline-secondary btn-sm"
                   >
                     Previous
@@ -318,7 +455,7 @@ export default async function MembersPage({ searchParams }: MembersPageProps) {
                 ) : null}
                 {page < totalPages ? (
                   <Link
-                    href={`/members?page=${page + 1}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&interest=${interest || ""}`}
+                    href={`/members?page=${page + 1}&location=${location}&q=${encodeURIComponent(q)}&sanghId=${requestedSanghId || ""}&interest=${interest || ""}`}
                     className="btn btn-outline-secondary btn-sm"
                   >
                     Next

@@ -56,13 +56,44 @@ export async function createFamilyAction(
   const rawMobile = data.headWhatsappNumber || data.mobile || "";
   const normalizedMobile = rawMobile ? normalizeMobile(rawMobile) : "";
 
+  // Flatten any nested children (under married son or daughter) into full members
+  // Automatically maps relationship with the Head of Family as GRANDCHILD (पोता / पोती / नाती / नातिन)
+  const flattenedMembers: typeof data.members = [];
+  for (const m of data.members) {
+    const { children, ...parent } = m;
+    flattenedMembers.push(parent);
+    if (children && children.length > 0) {
+      for (const c of children) {
+        if (c.name && c.name.trim()) {
+          flattenedMembers.push({
+            name: c.name.trim(),
+            dateOfBirth: c.dateOfBirth || null,
+            age: c.age || 0,
+            gender: c.gender || "MALE",
+            relationship: "GRANDCHILD", // Automatically mapped to Family Head
+            maritalStatus: "UNMARRIED",
+            bloodGroup: c.bloodGroup || null,
+            residenceLocation: m.residenceLocation || "IN_PUNE",
+            whatsappNumber: null,
+            occupation: (c.age || 0) < 18 ? "STUDENT" : null,
+            pathshalaStatus: "UNKNOWN",
+            preferredDay: "NO_PREFERENCE",
+            preferredTime: "NO_PREFERENCE",
+            preferredWeekdays: null,
+            transportPreference: null,
+          });
+        }
+      }
+    }
+  }
+
   // 4. Duplicate Check: Exact duplicate (Normalized mobile + Sangh) if mobile is provided
   const duplicateCheck = await checkFamilyDuplicates({
     mobile: rawMobile,
     sanghId: data.sanghId,
     members: [
       { name: data.headName, age: data.headAge, relationship: "HEAD" },
-      ...data.members,
+      ...flattenedMembers,
     ],
   });
 
@@ -93,7 +124,7 @@ export async function createFamilyAction(
     return { success: false, error: "Invalid or inactive Sangh selected." };
   }
 
-  const totalMembersCount = 1 + data.members.length; // Head + additional members
+  const totalMembersCount = 1 + flattenedMembers.length; // Head + all additional members (including grandchildren)
 
   try {
     // 5. ATOMIC POSTGRESQL TRANSACTION
@@ -169,8 +200,8 @@ export async function createFamilyAction(
 
         // E. Create Additional Members
         const createdAdditionalMembers = [];
-        for (let i = 0; i < data.members.length; i++) {
-          const m = data.members[i];
+        for (let i = 0; i < flattenedMembers.length; i++) {
+          const m = flattenedMembers[i];
           const mId = additionalMemberIds[i];
 
           const memberRecord = await tx.member.create({
@@ -256,7 +287,7 @@ export async function createFamilyAction(
     if (data.headEmail && data.headEmail.trim()) {
       const membersList = [
         { name: data.headName.trim(), relationship: "Head", memberId: result.headMemberId },
-        ...data.members.map((m, idx) => ({
+        ...flattenedMembers.map((m, idx) => ({
           name: m.name.trim(),
           relationship: m.relationship,
           memberId: result.allMemberIds[idx + 1] || "",

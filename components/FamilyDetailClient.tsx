@@ -395,14 +395,21 @@ export default function FamilyDetailClient({
                           Husband: <strong>{m.husbandName}</strong>
                         </div>
                       )}
-                      {(m.relationship === "SON" || m.relationship === "DAUGHTER") && m.residenceLocation && (
-                        <div className="small text-secondary mt-1">
-                          <i className="bi bi-geo-alt text-danger me-1"></i>
-                          {m.residenceLocation === "IN_PUNE"
-                            ? "In Pune"
-                            : m.residenceLocation === "OUT_OF_PUNE"
-                            ? "Outside Pune / India"
-                            : "Foreign / Abroad"}
+                      {m.residenceLocation && (
+                        <div className="small mt-1">
+                          {m.residenceLocation === "FOREIGN" ? (
+                            <span className="badge bg-danger text-white">
+                              <i className="bi bi-airplane-fill me-1"></i>In Foreign (विदेश / NRI)
+                            </span>
+                          ) : m.residenceLocation === "OUT_OF_PUNE" ? (
+                            <span className="badge bg-secondary-subtle text-secondary border">
+                              📍 Outside Pune
+                            </span>
+                          ) : (
+                            <span className="badge bg-success-subtle text-success border border-success-subtle">
+                              📍 In Pune
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -505,10 +512,21 @@ export default function FamilyDetailClient({
                       Husband: <strong>{m.husbandName}</strong>
                     </div>
                   )}
-                  {(m.relationship === "SON" || m.relationship === "DAUGHTER") && m.residenceLocation && (
-                    <div className="small text-secondary mt-1">
-                      <i className="bi bi-geo-alt text-danger me-1"></i>
-                      Location: <strong>{m.residenceLocation === "IN_PUNE" ? "In Pune" : m.residenceLocation === "OUT_OF_PUNE" ? "Outside Pune / India" : "Foreign / Abroad"}</strong>
+                  {m.residenceLocation && (
+                    <div className="small mt-1">
+                      {m.residenceLocation === "FOREIGN" ? (
+                        <span className="badge bg-danger text-white">
+                          <i className="bi bi-airplane-fill me-1"></i>In Foreign (विदेश / NRI)
+                        </span>
+                      ) : m.residenceLocation === "OUT_OF_PUNE" ? (
+                        <span className="badge bg-secondary-subtle text-secondary border">
+                          📍 Outside Pune
+                        </span>
+                      ) : (
+                        <span className="badge bg-success-subtle text-success border border-success-subtle">
+                          📍 In Pune
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

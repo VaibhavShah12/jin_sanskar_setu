@@ -42,6 +42,8 @@ export default async function SanghDirectoryPage() {
             whatsappNumber: true,
             husbandName: true,
             maritalStatus: true,
+            residenceLocation: true,
+            bloodGroup: true,
           },
           orderBy: [{ relationship: "asc" }, { age: "desc" }],
         },
@@ -86,6 +88,8 @@ export default async function SanghDirectoryPage() {
       whatsappNumber: m.whatsappNumber,
       husbandName: m.husbandName,
       maritalStatus: m.maritalStatus,
+      residenceLocation: m.residenceLocation,
+      bloodGroup: m.bloodGroup,
     })),
   }));
 

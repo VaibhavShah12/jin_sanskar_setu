@@ -14,6 +14,8 @@ export interface DirectoryMember {
   whatsappNumber: string | null;
   husbandName?: string | null;
   maritalStatus?: string | null;
+  residenceLocation?: string | null;
+  bloodGroup?: string | null;
 }
 
 export interface DirectoryFamily {
@@ -530,6 +532,16 @@ export default function SanghDirectoryClient({
                                     <span className="text-muted fs-8">
                                       ({m.relationship}{m.husbandName ? ` • W/o ${m.husbandName}` : ""})
                                     </span>
+                                    {m.bloodGroup && (
+                                      <span className="badge bg-danger-subtle text-danger border border-danger-subtle fs-8 ms-1 py-0">
+                                        🩸 {m.bloodGroup}
+                                      </span>
+                                    )}
+                                    {m.residenceLocation === "FOREIGN" && (
+                                      <span className="badge bg-danger text-white fs-8 ms-1 py-0">
+                                        ✈️ Foreign
+                                      </span>
+                                    )}
                                   </span>
                                   <span className="text-end">
                                     <span className="text-secondary me-2">{m.age}y</span>
