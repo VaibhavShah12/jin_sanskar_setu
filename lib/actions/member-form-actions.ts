@@ -11,6 +11,8 @@ import {
 } from "@/lib/otp/otp-service";
 import { Prisma } from "@prisma/client";
 import { normalizeMobile } from "@/lib/validation/family";
+import { updateFamilyAndMembersAction } from "@/lib/actions/family-actions";
+import { sendCorrectionApprovedEmail } from "@/lib/email/mailer";
 
 export interface MemberFormSubmissionInput {
   sessionToken: string;
@@ -206,7 +208,7 @@ export async function submitMemberFormAction(input: MemberFormSubmissionInput) {
 /**
  * Volunteer / Admin action: approve a submission and apply validated changes atomically
  */
-export async function approveSubmissionAction(submissionId: string) {
+export async function approveSubmissionAction(submissionId: string, adjustedProposedData?: any) {
   const user = await requireVolunteerOrAdmin();
 
   if (!submissionId) {
@@ -214,26 +216,116 @@ export async function approveSubmissionAction(submissionId: string) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // 1. Concurrency-Safe Atomic Check: Lock and verify submission is currently PENDING
-      const submission = await tx.memberFormSubmission.findUnique({
-        where: { id: submissionId },
-        include: { family: true, sangh: true },
+    // 1. Fetch submission with family and sangh
+    const submission = await prisma.memberFormSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        family: {
+          include: {
+            members: { where: { status: "ACTIVE" } },
+          },
+        },
+        sangh: true,
+      },
+    });
+
+    if (!submission) {
+      return { success: false, error: "Submission not found." };
+    }
+
+    if (submission.status !== "PENDING") {
+      return {
+        success: false,
+        error: `ALREADY_PROCESSED: This submission has already been ${submission.status.toLowerCase()} by ${submission.reviewedBy || "another volunteer"}.`,
+      };
+    }
+
+    // Role check: Volunteers can only review their assigned Sangh
+    if (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== submission.sanghId) {
+      return {
+        success: false,
+        error: "Unauthorized: You do not have permission to review submissions for this Sangh.",
+      };
+    }
+
+    const appliedChangesJson = (submission.appliedChanges as any) || {};
+    const proposedData = adjustedProposedData || appliedChangesJson.proposedData;
+
+    // A. Full Form Refill Approval workflow
+    if (proposedData) {
+      const updateRes = await updateFamilyAndMembersAction({
+        ...proposedData,
+        familyId: submission.familyId,
       });
 
-      if (!submission) {
-        throw new Error("Submission not found.");
+      if (!updateRes.success) {
+        return {
+          success: false,
+          error: updateRes.error || "Failed to apply full form changes to database.",
+        };
       }
 
-      if (submission.status !== "PENDING") {
-        throw new Error(`ALREADY_PROCESSED: This submission has already been ${submission.status.toLowerCase()} by ${submission.reviewedBy || "another volunteer"}.`);
+      const updateResult = await prisma.memberFormSubmission.updateMany({
+        where: {
+          id: submission.id,
+          status: "PENDING",
+        },
+        data: {
+          status: "APPROVED",
+          reviewedBy: user.username,
+          reviewedAt: new Date(),
+          appliedChanges: {
+            ...appliedChangesJson,
+            approvedAt: new Date().toISOString(),
+            approvedBy: user.username,
+            appliedData: proposedData,
+          },
+        },
+      });
+
+      if (updateResult.count === 0) {
+        return {
+          success: false,
+          error: "ALREADY_PROCESSED: This submission has already been reviewed by another volunteer.",
+        };
       }
 
-      // Check Sangh authorization
-      if (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== submission.sanghId) {
-        throw new Error("Unauthorized: You do not have permission to review submissions for this Sangh.");
+      // Send email to family if registered email exists
+      if (submission.family.email) {
+        try {
+          await sendCorrectionApprovedEmail({
+            to: submission.family.email,
+            headName: submission.submittedHeadName || submission.family.headName,
+            familyId: submission.family.familyId,
+            sanghName: submission.sangh.name,
+            submissionNumber: submission.submissionNumber,
+          });
+        } catch (emailErr) {
+          console.error("[EMAIL] Failed to send correction approval email:", emailErr);
+        }
       }
 
+      await logAuditEvent({
+        action: "MEMBER_FORM_APPROVED",
+        entityType: "Family",
+        entityId: submission.familyId,
+        performedBy: user.username,
+        metadata: {
+          submissionNumber: submission.submissionNumber,
+          familyId: submission.family.familyId,
+          fullFormRefillApproved: true,
+        },
+      });
+
+      const updatedRecord = await prisma.memberFormSubmission.findUnique({
+        where: { id: submission.id },
+      });
+
+      return { success: true, submission: updatedRecord };
+    }
+
+    // B. Legacy 5-Field atomic transaction workflow
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const appliedChanges: Record<string, any> = {};
       const familyUpdates: Record<string, any> = { updatedBy: user.username };
 
@@ -287,7 +379,7 @@ export async function approveSubmissionAction(submissionId: string) {
         }
       }
 
-      // 2. Atomic transition to APPROVED (conditional update strictly where status is PENDING)
+      // Atomic transition to APPROVED
       const updateResult = await tx.memberFormSubmission.updateMany({
         where: {
           id: submission.id,
@@ -305,7 +397,7 @@ export async function approveSubmissionAction(submissionId: string) {
         throw new Error("ALREADY_PROCESSED: This submission has already been reviewed by another volunteer.");
       }
 
-      // 3. Apply changes to Family record if any field was updated
+      // Apply changes to Family record if any field was updated
       if (Object.keys(familyUpdates).length > 1) {
         await tx.family.update({
           where: { id: submission.familyId },
@@ -313,7 +405,7 @@ export async function approveSubmissionAction(submissionId: string) {
         });
       }
 
-      // 4. Audit Log
+      // Audit Log
       await tx.auditLog.create({
         data: {
           action: "MEMBER_FORM_APPROVED",
@@ -438,6 +530,7 @@ export interface CorrectionRequestInput {
   newMobile?: string;
   correctionDetails?: string;
   additionalNotes?: string;
+  proposedData?: any; // Full proposed update payload
 }
 
 /**
@@ -464,27 +557,47 @@ export async function submitCorrectionRequestAction(input: CorrectionRequestInpu
     const paddedNum = String(counter.lastNumber).padStart(4, "0");
     const submissionNumber = `REQ-${currentYear}-${paddedNum}`;
 
+    const proposed = input.proposedData;
+    const effectiveMobile = (proposed?.mobile || input.newMobile)?.trim() || family.mobile;
+    const effectiveHeadName = (proposed?.headName || family.headName)?.trim();
+    const effectiveAddress = (proposed?.address || input.newAddress)?.trim() || null;
+    const effectiveArea = (proposed?.area || input.newArea)?.trim() || null;
+    const effectiveNativePlace = (proposed?.nativePlace || input.newNativePlace)?.trim() || null;
+    const effectiveOccupation = (proposed?.headOccupation || input.newOccupation)?.trim() || null;
+    const effectiveMemberCount = proposed?.members ? proposed.members.length : family.members.length;
+
+    const appliedChangesData: any = proposed
+      ? {
+          proposedData: proposed,
+          notes: input.additionalNotes || null,
+          submittedAt: new Date().toISOString(),
+        }
+      : Prisma.DbNull;
+
     const submission = await prisma.memberFormSubmission.create({
       data: {
         submissionNumber,
         familyId: family.id,
         headMemberId: family.headMemberId,
         sanghId: family.sanghId,
-        submittedMobile: input.newMobile?.trim() || family.mobile,
-        submittedHeadName: family.headName,
-        headInfoCorrect: !Boolean(input.newMobile || input.newOccupation),
-        addressChanged: Boolean(input.newAddress && input.newAddress.trim() !== family.address),
-        newAddress: input.newAddress?.trim() || null,
-        newArea: input.newArea?.trim() || null,
-        newNativePlace: input.newNativePlace?.trim() || null,
-        newOccupation: input.newOccupation?.trim() || null,
-        newMobile: input.newMobile?.trim() || null,
-        memberCount: family.members.length,
+        submittedMobile: effectiveMobile,
+        submittedHeadName: effectiveHeadName,
+        headInfoCorrect: false,
+        addressChanged: Boolean(effectiveAddress && effectiveAddress !== family.address),
+        newAddress: effectiveAddress,
+        newArea: effectiveArea,
+        newNativePlace: effectiveNativePlace,
+        newOccupation: effectiveOccupation,
+        newMobile: effectiveMobile !== family.mobile ? effectiveMobile : null,
+        memberCount: effectiveMemberCount,
         membersUpToDate: true,
         correctionNeeded: true,
-        correctionDetails: input.correctionDetails?.trim() || null,
+        correctionDetails:
+          input.correctionDetails?.trim() ||
+          (proposed ? "Full family and member details refill/re-update submitted for Admin approval" : null),
         additionalNotes: input.additionalNotes?.trim() || null,
         status: "PENDING",
+        appliedChanges: appliedChangesData,
       },
     });
 
@@ -498,6 +611,7 @@ export async function submitCorrectionRequestAction(input: CorrectionRequestInpu
         familyId: family.familyId,
         headName: family.headName,
         sangh: family.sangh.name,
+        hasFullProposedData: Boolean(proposed),
       },
     });
 
@@ -546,10 +660,32 @@ export async function getCorrectionRequestsAction(statusFilter?: "ALL" | "PENDIN
     familyRefId: s.family.familyId,
     headName: s.submittedHeadName,
     maskedMobile: s.submittedMobile.length > 5 ? `${s.submittedMobile.slice(0, 3)}****${s.submittedMobile.slice(-3)}` : s.submittedMobile,
+    rawMobile: s.submittedMobile,
     currentAddress: s.family.address,
+    currentLane: (s.family as any).lane || "",
     currentArea: s.family.area,
     currentNativePlace: s.family.nativePlace || "—",
+    currentSect: (s.family as any).sect || "",
+    currentOtherSect: (s.family as any).otherSect || "",
+    currentHeadBloodGroup: (s.family as any).headBloodGroup || "",
+    currentEmail: s.family.email || "",
     currentMemberCount: s.family.members.length,
+    currentMembers: s.family.members.map((m) => ({
+      id: m.id,
+      memberId: m.memberId,
+      name: m.name,
+      relationship: m.relationship,
+      age: m.age,
+      gender: m.gender,
+      bloodGroup: m.bloodGroup || "",
+      residenceLocation: m.residenceLocation || "IN_PUNE",
+      maritalStatus: m.maritalStatus || "UNMARRIED",
+      wifeName: m.wifeName || "",
+      wifeContact: m.wifeContact || "",
+      husbandName: m.husbandName || "",
+      occupation: m.occupation || "",
+      whatsappNumber: m.whatsappNumber || "",
+    })),
     sanghName: s.sangh.name,
     sanghPrefix: s.sangh.prefix,
     headInfoCorrect: s.headInfoCorrect,

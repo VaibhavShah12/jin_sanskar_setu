@@ -67,11 +67,22 @@ export default function FamilyDetailClient({
     }
   };
 
-  // Direct Edit Family & Members State (Admins / Volunteers)
+  // Direct Edit & Full Form Refill State
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editActiveTab, setEditActiveTab] = useState<"HOUSEHOLD" | "MEMBERS">("HOUSEHOLD");
+  const [editModalMode, setEditModalMode] = useState<"DIRECT" | "CORRECTION">("DIRECT");
+  const [editActiveTab, setEditActiveTab] = useState<"HOUSEHOLD" | "MEMBERS" | "NOTES">("HOUSEHOLD");
+  const [correctionNotes, setCorrectionNotes] = useState("");
+
+  const headMember = (family.members || []).find(
+    (m: any) => m.id === family.headMemberId || m.relationship === "HEAD"
+  );
+
   const [editingData, setEditingData] = useState({
     headName: family.headName || "",
+    headAge: headMember?.age !== undefined ? headMember.age : 40,
+    headDateOfBirth: headMember?.dateOfBirth
+      ? new Date(headMember.dateOfBirth).toISOString().split("T")[0]
+      : "",
     mobile: family.mobile || "",
     email: family.email || "",
     address: family.address || "",
@@ -80,25 +91,27 @@ export default function FamilyDetailClient({
     nativePlace: family.nativePlace || "",
     sect: family.sect || "",
     otherSect: family.otherSect || "",
-    headOccupation: family.headOccupation || "",
-    headBloodGroup: family.headBloodGroup || "",
-    members: (family.members || []).map((m: any) => ({
-      id: m.id,
-      memberId: m.memberId,
-      name: m.name || "",
-      age: m.age || 0,
-      dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth).toISOString().split("T")[0] : "",
-      gender: m.gender || "MALE",
-      relationship: m.relationship || "SPOUSE",
-      maritalStatus: m.maritalStatus || "UNMARRIED",
-      wifeName: m.wifeName || "",
-      wifeContact: m.wifeContact || "",
-      husbandName: m.husbandName || "",
-      residenceLocation: m.residenceLocation || "IN_PUNE",
-      bloodGroup: m.bloodGroup || "",
-      whatsappNumber: m.whatsappNumber || "",
-      occupation: m.occupation || "",
-    })),
+    headOccupation: headMember?.occupation || family.headOccupation || "",
+    headBloodGroup: headMember?.bloodGroup || family.headBloodGroup || "",
+    members: (family.members || [])
+      .filter((m: any) => m.id !== family.headMemberId && m.relationship !== "HEAD")
+      .map((m: any) => ({
+        id: m.id,
+        memberId: m.memberId,
+        name: m.name || "",
+        age: m.age || 0,
+        dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth).toISOString().split("T")[0] : "",
+        gender: m.gender || "MALE",
+        relationship: m.relationship || "SPOUSE",
+        maritalStatus: m.maritalStatus || "UNMARRIED",
+        wifeName: m.wifeName || "",
+        wifeContact: m.wifeContact || "",
+        husbandName: m.husbandName || "",
+        residenceLocation: m.residenceLocation || "IN_PUNE",
+        bloodGroup: m.bloodGroup || "",
+        whatsappNumber: m.whatsappNumber || "",
+        occupation: m.occupation || "",
+      })),
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -135,8 +148,8 @@ export default function FamilyDetailClient({
     }));
   };
 
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Direct Save handler (Admin direct write to PostgreSQL)
+  const handleSaveDirectEdit = async () => {
     setSavingEdit(true);
     setEditError(null);
     setEditSuccess(null);
@@ -145,6 +158,8 @@ export default function FamilyDetailClient({
       const res = await updateFamilyAndMembersAction({
         familyId: family.id,
         headName: editingData.headName,
+        headAge: editingData.headAge,
+        headDateOfBirth: editingData.headDateOfBirth || undefined,
         mobile: editingData.mobile,
         email: editingData.email,
         address: editingData.address,
@@ -161,7 +176,7 @@ export default function FamilyDetailClient({
       if (!res.success) {
         setEditError(res.error || "Failed to update family details.");
       } else {
-        setEditSuccess(res.message || "Updated successfully!");
+        setEditSuccess(res.message || "Family & member details updated directly in database!");
         setTimeout(() => {
           setShowEditModal(false);
           router.refresh();
@@ -174,20 +189,61 @@ export default function FamilyDetailClient({
     }
   };
 
-  // Correction Request State
-  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
-  const [submittingCorrection, setSubmittingCorrection] = useState(false);
-  const [correctionSuccess, setCorrectionSuccess] = useState<string | null>(null);
-  const [correctionError, setCorrectionError] = useState<string | null>(null);
-  const [correctionForm, setCorrectionForm] = useState({
-    newAddress: family.address || "",
-    newArea: family.area || "",
-    newNativePlace: family.nativePlace || "",
-    newOccupation: "",
-    newMobile: "",
-    correctionDetails: "",
-    additionalNotes: "",
-  });
+  // Correction Request Submission handler (Queued for Admin review & approval)
+  const handleSubmitCorrectionRequest = async () => {
+    setSavingEdit(true);
+    setEditError(null);
+    setEditSuccess(null);
+
+    try {
+      const res = await submitCorrectionRequestAction({
+        familyId: family.id,
+        proposedData: {
+          familyId: family.id,
+          headName: editingData.headName,
+          headAge: editingData.headAge,
+          headDateOfBirth: editingData.headDateOfBirth || undefined,
+          mobile: editingData.mobile,
+          email: editingData.email,
+          address: editingData.address,
+          lane: editingData.lane,
+          area: editingData.area,
+          nativePlace: editingData.nativePlace,
+          sect: editingData.sect,
+          otherSect: editingData.otherSect,
+          headOccupation: editingData.headOccupation,
+          headBloodGroup: editingData.headBloodGroup,
+          members: editingData.members,
+        },
+        additionalNotes: correctionNotes,
+      });
+
+      if (!res.success) {
+        setEditError(res.error || "Failed to submit correction request.");
+      } else {
+        setEditSuccess(
+          `Correction Request Submitted! Reference: ${res.submissionNumber}. The request has been sent to the Admin for approval.`
+        );
+        setTimeout(() => {
+          setShowEditModal(false);
+          router.refresh();
+        }, 2200);
+      }
+    } catch (err: any) {
+      setEditError(err?.message || "An unexpected error occurred.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editModalMode === "DIRECT") {
+      await handleSaveDirectEdit();
+    } else {
+      await handleSubmitCorrectionRequest();
+    }
+  };
 
   // Direct Family Email State
   const [showDirectEmailModal, setShowDirectEmailModal] = useState(false);
@@ -299,21 +355,37 @@ export default function FamilyDetailClient({
 
           {/* Action Buttons */}
           <div className="d-flex flex-wrap gap-2">
-            {/* Direct Edit Details (Admins & Volunteers) */}
-            {canEdit && (
+            {/* Direct Edit Details (Admins) */}
+            {isAdmin && (
               <button
                 onClick={() => {
+                  setEditModalMode("DIRECT");
                   setShowEditModal(true);
                   setEditError(null);
                   setEditSuccess(null);
                 }}
-                className="btn btn-jain-primary btn-sm px-3 shadow-sm d-flex align-items-center gap-1"
-                title="Directly edit family and member details (Blood group, foreigner status, sect, lane, marital info)"
+                className="btn btn-primary btn-sm px-3 shadow-sm d-flex align-items-center gap-1 fw-bold"
+                title="Directly edit family and member details in PostgreSQL without approval"
               >
                 <i className="bi bi-pencil-fill"></i>
-                <span>Edit Details (संशोधन करें)</span>
+                <span>✏️ Direct Edit (व्यवस्थापक संपादन)</span>
               </button>
             )}
+
+            {/* Refill / Re-update Whole Form for Correction (Available for all: Admins, Volunteers, Trustees) */}
+            <button
+              onClick={() => {
+                setEditModalMode("CORRECTION");
+                setShowEditModal(true);
+                setEditError(null);
+                setEditSuccess(null);
+              }}
+              className="btn btn-outline-warning btn-sm px-3 text-dark fw-bold shadow-sm d-flex align-items-center gap-1"
+              title="Refill or re-update the full form with all current details and submit for Admin approval"
+            >
+              <i className="bi bi-file-earmark-diff text-warning-emphasis"></i>
+              <span>📝 Refill Form / Request Correction (फॉर्म पुनः भरें)</span>
+            </button>
 
             {/* Email Family ID Cards */}
             {family.email && (
@@ -328,17 +400,6 @@ export default function FamilyDetailClient({
               </button>
             )}
 
-            <button
-              onClick={() => {
-                setShowCorrectionModal(true);
-                setCorrectionSuccess(null);
-                setCorrectionError(null);
-              }}
-              className="btn btn-outline-warning btn-sm px-3 text-dark fw-semibold shadow-sm"
-              title="Submit a profile update or correction request"
-            >
-              <i className="bi bi-pencil-square me-1 text-warning-emphasis"></i> Request Correction
-            </button>
             {family.email && (
               <button
                 onClick={() => {
@@ -351,6 +412,7 @@ export default function FamilyDetailClient({
                 <i className="bi bi-envelope-at me-1 text-info"></i> Send Email
               </button>
             )}
+
             {isAdmin && family.status === "ACTIVE" && (
               <button
                 onClick={() => setShowArchiveModal(true)}
@@ -820,171 +882,6 @@ export default function FamilyDetailClient({
         onCancel={() => setMemberToArchive(null)}
       />
 
-      {/* Profile Correction Request Modal */}
-      {showCorrectionModal && (
-        <div className="modal fade show d-block" tabIndex={-1} style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-            <div className="modal-content border-0 shadow">
-              <div className="modal-header bg-warning bg-opacity-25 border-bottom">
-                <h5 className="modal-title fs-6 fw-bold text-dark">
-                  <i className="bi bi-pencil-square text-warning-emphasis me-2"></i>
-                  Request Profile Correction (विवरण सुधार अनुरोध)
-                </h5>
-                <button type="button" className="btn-close" onClick={() => setShowCorrectionModal(false)}></button>
-              </div>
-
-              {correctionSuccess ? (
-                <div className="modal-body p-4 text-center">
-                  <div className="display-4 text-success mb-3">
-                    <i className="bi bi-check-circle-fill"></i>
-                  </div>
-                  <h5 className="fw-bold text-dark">Correction Request Submitted!</h5>
-                  <p className="text-muted small mb-3">
-                    Your request has been recorded under reference number:
-                  </p>
-                  <div className="alert alert-success d-inline-block font-monospace fw-bold fs-5 px-4 py-2 mb-3">
-                    {correctionSuccess}
-                  </div>
-                  <p className="text-muted small">
-                    Sangh Trustees will review and approve the requested updates. Once verified, the database will be automatically synced.
-                  </p>
-                  <button type="button" className="btn btn-primary btn-sm px-4" onClick={() => setShowCorrectionModal(false)}>
-                    Close
-                  </button>
-                </div>
-              ) : (
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setSubmittingCorrection(true);
-                    setCorrectionError(null);
-                    try {
-                      const res = await submitCorrectionRequestAction({
-                        familyId: family.id,
-                        newAddress: correctionForm.newAddress,
-                        newArea: correctionForm.newArea,
-                        newNativePlace: correctionForm.newNativePlace,
-                        newOccupation: correctionForm.newOccupation,
-                        newMobile: correctionForm.newMobile,
-                        correctionDetails: correctionForm.correctionDetails,
-                        additionalNotes: correctionForm.additionalNotes,
-                      });
-                      if (!res.success) {
-                        setCorrectionError(res.error || "Failed to submit request.");
-                      } else {
-                        setCorrectionSuccess(res.submissionNumber || "REQ-SUBMITTED");
-                      }
-                    } catch (err: any) {
-                      setCorrectionError(err?.message || "An unexpected error occurred.");
-                    } finally {
-                      setSubmittingCorrection(false);
-                    }
-                  }}
-                >
-                  <div className="modal-body p-4">
-                    {correctionError && (
-                      <div className="alert alert-danger small mb-3">
-                        <i className="bi bi-exclamation-triangle-fill me-1"></i> {correctionError}
-                      </div>
-                    )}
-                    <p className="text-muted small mb-3">
-                      Enter any fields that need updating for family <strong>{family.headName}</strong> ({family.familyId}). Unchanged fields can be left as-is.
-                    </p>
-
-                    <div className="row g-3">
-                      <div className="col-12 col-md-8">
-                        <label className="form-label small fw-semibold text-dark">Residential Address</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          value={correctionForm.newAddress}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, newAddress: e.target.value })}
-                          placeholder="Full flat / building / street address"
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">Area / Locality</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          value={correctionForm.newArea}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, newArea: e.target.value })}
-                          placeholder="e.g. Bibvewadi, Salisbury Park"
-                        />
-                      </div>
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Native Village / Mul Gaam (મૂળ ગામ)</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          value={correctionForm.newNativePlace}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, newNativePlace: e.target.value })}
-                          placeholder="e.g. Patan, Palanpur, Sirohi"
-                        />
-                      </div>
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Primary Mobile (if changed)</label>
-                        <input
-                          type="tel"
-                          maxLength={10}
-                          className="form-control form-control-sm"
-                          value={correctionForm.newMobile}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, newMobile: e.target.value })}
-                          placeholder="e.g. 9822012345 (Leave blank if same)"
-                        />
-                      </div>
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Head Occupation</label>
-                        <select
-                          className="form-select form-select-sm"
-                          value={correctionForm.newOccupation}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, newOccupation: e.target.value })}
-                        >
-                          <option value="">-- Keep Current / Not Changed --</option>
-                          <option value="SERVICE">Service (Job)</option>
-                          <option value="BUSINESS">Business</option>
-                          <option value="RETIRED">Retired</option>
-                          <option value="HOUSEWIFE">Housewife</option>
-                          <option value="STUDENT">Student</option>
-                          <option value="OTHER">Other</option>
-                        </select>
-                      </div>
-                      <div className="col-12">
-                        <label className="form-label small fw-semibold text-dark">Family Member Corrections or Additions</label>
-                        <textarea
-                          className="form-control form-control-sm"
-                          rows={3}
-                          value={correctionForm.correctionDetails}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, correctionDetails: e.target.value })}
-                          placeholder="e.g. Please add newborn daughter Jiya born on 15/08/2026 / Update son's age to 14"
-                        ></textarea>
-                      </div>
-                      <div className="col-12">
-                        <label className="form-label small fw-semibold text-dark">Additional Remarks / Message to Sangh</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          value={correctionForm.additionalNotes}
-                          onChange={(e) => setCorrectionForm({ ...correctionForm, additionalNotes: e.target.value })}
-                          placeholder="Optional notes or convenient time to call"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowCorrectionModal(false)}>
-                      Cancel
-                    </button>
-                    <button type="submit" className="btn btn-warning btn-sm px-4 fw-semibold text-dark shadow-sm" disabled={submittingCorrection}>
-                      {submittingCorrection ? "Submitting..." : "Submit Correction Request"}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {/* Direct Family Email Modal */}
       {showDirectEmailModal && (
         <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 1050 }} role="dialog">
@@ -1056,7 +953,7 @@ export default function FamilyDetailClient({
       )}
 
       {/* =====================================================================
-          DIRECT EDIT FAMILY & MEMBERS MODAL (ADMINS & VOLUNTEERS)
+          DIRECT EDIT / FULL FORM REFILL MODAL (ADMINS & VOLUNTEERS)
           ===================================================================== */}
       {showEditModal && (
         <div
@@ -1066,19 +963,45 @@ export default function FamilyDetailClient({
         >
           <div className="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
             <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
-              <div className="modal-header bg-primary text-white py-3 px-4">
+              <div
+                className={`modal-header py-3 px-4 ${
+                  editModalMode === "DIRECT"
+                    ? "bg-primary text-white"
+                    : "bg-warning-subtle border-bottom border-warning-subtle text-dark"
+                }`}
+              >
                 <div>
-                  <h5 className="modal-title fw-bold mb-0">
-                    <i className="bi bi-pencil-square me-2"></i>
-                    Edit Family &amp; Members (पारिवारिक विवरण संशोधन)
-                  </h5>
-                  <small className="text-white-50">
+                  <div className="d-flex align-items-center gap-2 mb-1">
+                    <h5 className="modal-title fw-bold mb-0">
+                      {editModalMode === "DIRECT" ? (
+                        <>
+                          <i className="bi bi-shield-lock-fill me-2"></i>
+                          Admin Direct Edit (व्यवस्थापक सीधा संपादन)
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-pencil-square text-warning-emphasis me-2"></i>
+                          Refill &amp; Re-update Whole Form (संपूर्ण फॉर्म पुनः भरें / विवरण सुधार अनुरोध)
+                        </>
+                      )}
+                    </h5>
+                    <span
+                      className={`badge small ${
+                        editModalMode === "DIRECT"
+                          ? "bg-light text-primary border"
+                          : "bg-warning text-dark border border-warning"
+                      }`}
+                    >
+                      {editModalMode === "DIRECT" ? "Admin Direct Save" : "Approval Required"}
+                    </span>
+                  </div>
+                  <small className={editModalMode === "DIRECT" ? "text-white-50" : "text-muted"}>
                     Family ID: {family.familyId} • Sangh: {family.sangh?.name} • Head: {family.headName}
                   </small>
                 </div>
                 <button
                   type="button"
-                  className="btn-close btn-close-white"
+                  className={`btn-close ${editModalMode === "DIRECT" ? "btn-close-white" : ""}`}
                   onClick={() => setShowEditModal(false)}
                 ></button>
               </div>
@@ -1104,11 +1027,31 @@ export default function FamilyDetailClient({
                       <i className="bi bi-people me-1"></i> Family Members ({editingData.members.length}) (सदस्य सूची)
                     </button>
                   </li>
+                  {editModalMode === "CORRECTION" && (
+                    <li className="nav-item">
+                      <button
+                        type="button"
+                        onClick={() => setEditActiveTab("NOTES")}
+                        className={`nav-link fw-semibold ${editActiveTab === "NOTES" ? "active border-bottom-0 bg-white text-primary" : "text-secondary"}`}
+                      >
+                        <i className="bi bi-chat-left-text me-1"></i> Reason for Correction (सुधार का कारण)
+                      </button>
+                    </li>
+                  )}
                 </ul>
               </div>
 
-              <form onSubmit={handleSaveEdit}>
+              <form onSubmit={handleModalSubmit}>
                 <div className="modal-body p-4" style={{ maxHeight: "calc(80vh - 140px)", overflowY: "auto" }}>
+                  {editModalMode === "CORRECTION" && !isAdmin && (
+                    <div className="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 shadow-xs">
+                      <i className="bi bi-info-circle-fill fs-5 text-warning-emphasis"></i>
+                      <span>
+                        <strong>प्रशासक समीक्षा:</strong> यह फॉर्म सबमिट होने पर संघ व्यवस्थापक (Admin) के पास समीक्षा हेतु जाएगा। व्यवस्थापक द्वारा स्वीकृति मिलने पर डेटाबेस में सभी विवरण (रक्त समूह, सम्प्रदाय, शेरी, सदस्य आदि) स्वतः अद्यतन हो जाएंगे।
+                      </span>
+                    </div>
+                  )}
+
                   {editSuccess && (
                     <div className="alert alert-success d-flex align-items-center gap-2 mb-3 shadow-xs">
                       <i className="bi bi-check-circle-fill fs-5"></i>
@@ -1303,6 +1246,32 @@ export default function FamilyDetailClient({
                           <option value="STUDENT">Student</option>
                           <option value="OTHER">Other</option>
                         </select>
+                      </div>
+
+                      {/* Head Age & Date of Birth */}
+                      <div className="col-6 col-md-3">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Head Age (उम्र)
+                        </label>
+                        <input
+                          type="number"
+                          min="18"
+                          max="120"
+                          className="form-control form-control-sm"
+                          value={editingData.headAge}
+                          onChange={(e) => setEditingData({ ...editingData, headAge: parseInt(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <div className="col-6 col-md-3">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Head Date of Birth (जन्म तिथि)
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={editingData.headDateOfBirth}
+                          onChange={(e) => setEditingData({ ...editingData, headDateOfBirth: e.target.value })}
+                        />
                       </div>
                     </div>
                   )}
@@ -1591,9 +1560,28 @@ export default function FamilyDetailClient({
                       </div>
                     </div>
                   )}
+
+                  {/* TAB 3: CORRECTION NOTES */}
+                  {editActiveTab === "NOTES" && (
+                    <div className="p-3 bg-light rounded-3 border">
+                      <label className="form-label small fw-bold text-dark mb-1">
+                        Reason for Correction / Notes for Admin (सुधार का कारण व संघ व्यवस्थापक के लिए संदेश)
+                      </label>
+                      <textarea
+                        rows={4}
+                        className="form-control"
+                        placeholder="उदा. पुत्र का रक्त समूह B+ किया, नए बालक का नाम जोड़ा, विदेश जाने का विवरण अद्यतन किया..."
+                        value={correctionNotes}
+                        onChange={(e) => setCorrectionNotes(e.target.value)}
+                      ></textarea>
+                      <div className="form-text small mt-2">
+                        यह टिप्पणी संघ व्यवस्थापक (Admin) को अनुमोदन के समय दिखाई देगी।
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="modal-footer bg-light py-2 px-4 d-flex justify-content-between">
+                <div className="modal-footer bg-light py-2 px-4 d-flex justify-content-between align-items-center">
                   <button
                     type="button"
                     className="btn btn-outline-secondary btn-sm"
@@ -1601,22 +1589,47 @@ export default function FamilyDetailClient({
                   >
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    disabled={savingEdit}
-                    className="btn btn-primary btn-sm px-4 fw-semibold shadow-xs"
-                  >
-                    {savingEdit ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                        Saving Changes...
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-check2-circle me-1"></i> Save All Changes (संशोधन सुरक्षित करें)
-                      </>
+
+                  <div className="d-flex align-items-center gap-2">
+                    {/* If Admin is in CORRECTION mode, they can still choose to save directly! */}
+                    {isAdmin && editModalMode === "CORRECTION" && (
+                      <button
+                        type="button"
+                        onClick={handleSaveDirectEdit}
+                        disabled={savingEdit}
+                        className="btn btn-outline-primary btn-sm px-3 fw-bold"
+                        title="Skip approval and commit directly to database as Admin"
+                      >
+                        <i className="bi bi-lightning-charge-fill me-1 text-warning"></i>
+                        <span>Admin Direct Save (सीधे सहेजें)</span>
+                      </button>
                     )}
-                  </button>
+
+                    <button
+                      type="submit"
+                      disabled={savingEdit}
+                      className={`btn btn-sm px-4 fw-bold shadow-xs ${
+                        editModalMode === "DIRECT"
+                          ? "btn-primary text-white"
+                          : "btn-warning text-dark"
+                      }`}
+                    >
+                      {savingEdit ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                          Processing...
+                        </>
+                      ) : editModalMode === "DIRECT" ? (
+                        <>
+                          <i className="bi bi-check2-circle me-1"></i> Save Directly to Database (सीधा संपादन)
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-send-check me-1"></i> Submit for Admin Approval (प्रशासक को भेजें)
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

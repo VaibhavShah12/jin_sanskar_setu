@@ -781,3 +781,78 @@ export async function sendFamilyIdCardsEmail({
       .join('\n')}\n\nडिजिटल कार्ड पोर्टल लिंक: ${directLink}\n\nजिन संस्कार सेतु`,
   });
 }
+
+/**
+ * Sends an email notification to the family when a profile correction request is approved by Admin.
+ */
+export async function sendCorrectionApprovedEmail({
+  to,
+  headName,
+  familyId,
+  sanghName,
+  submissionNumber,
+}: {
+  to: string;
+  headName: string;
+  familyId: string;
+  sanghName: string;
+  submissionNumber: string;
+}): Promise<SendEmailResult> {
+  const subject = `श्री ${sanghName} - परिवार विवरण संशोधन स्वीकृत (Correction Approved: ${familyId})`;
+  const portalUrl = `${getAppBaseUrl()}/families`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="hi">
+    <head>
+      <meta charset="utf-8">
+      <title>विवरण संशोधन स्वीकृत</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
+      <table width="100%" max-width="600" align="center" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <tr>
+          <td style="background-color: #0d5c3a; color: #ffffff; padding: 24px 20px; text-align: center;">
+            <h1 style="margin: 0; font-size: 22px; font-weight: 800;">श्री ${sanghName}</h1>
+            <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.95; letter-spacing: 0.5px;">जिन संस्कार सेतु • परिवार विवरण संशोधन स्वीकृति</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 28px 24px;">
+            <p style="font-size: 16px; color: #1e293b; margin: 0 0 14px 0;">
+              जय जिनेन्द्र <strong>${headName} जी</strong>,
+            </p>
+            <p style="font-size: 14px; color: #334155; line-height: 1.6; margin: 0 0 18px 0;">
+              आपके परिवार (Family ID: <strong style="color: #0d5c3a;">${familyId}</strong>) द्वारा प्रस्तुत किया गया विवरण संशोधन अनुरोध (संदर्भ सं.: <strong>${submissionNumber}</strong>) संघ व्यवस्थापक (Admin) द्वारा सफलतापूर्वक सत्यापित एवं <strong>स्वीकृत (Approved)</strong> कर दिया गया है।
+            </p>
+
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+              <span style="color: #166534; font-size: 11px; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px;">स्थिति / Status</span>
+              <div style="font-size: 16px; font-weight: 800; color: #0d5c3a;">✔ संसोधित विवरण डेटाबेस में अद्यतन (Updated in Database)</div>
+              <div style="font-size: 12px; color: #475569; margin-top: 6px; line-height: 1.5;">
+                रक्त समूह (Blood Group), जैन सम्प्रदाय, शेरी/गली, सदस्य विवरण, विदेश/पुणे स्थिति एवं अन्य सभी संशोधन अधिकृत डेटाबेस में सुरक्षित दर्ज हो चुके हैं।
+              </div>
+            </div>
+
+            <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+              यदि आपको कोई अन्य सहायता या जानकारी चाहिए, तो कृपया अपने संघ कार्यालय या स्वयंसेवक से संपर्क करें।
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 20px; text-align: center; font-size: 12px; color: #94a3b8;">
+            <p style="margin: 0 0 4px 0; font-weight: 600; color: #475569;">श्री ${sanghName} • जिन संस्कार सेतु</p>
+            <p style="margin: 0;">अहिंसा परमो धर्मः • जीओ और जीने दो</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html,
+    text: `जय जिनेन्द्र ${headName} जी,\n\nश्री ${sanghName} - आपके परिवार (${familyId}) का विवरण संशोधन अनुरोध (${submissionNumber}) व्यवस्थापक द्वारा स्वीकृत कर डेटाबेस में सुरक्षित अपडेट कर दिया गया है।\n\nजिन संस्कार सेतु`,
+  });
+}
