@@ -217,20 +217,14 @@ export async function sendFamilyRegistrationEmail({
               </span>
             </div>
 
-            <!-- Direct Portal Access Highlight -->
-            <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 16px; margin-bottom: 24px;">
-              <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 16px; margin-right: 8px;">🔗</span>
-                <strong style="color: #1e40af; font-size: 14px;">सीधा पोर्टल लिंक (No QR Scanner Required)</strong>
+            <!-- Registration Certificate Note (Zero Redirection) -->
+            <div style="background-color: #f8fafc; border: 1.5px dashed #0d5c3a; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px;">
+              <div style="font-size: 13px; font-weight: 700; color: #0d5c3a; margin-bottom: 4px;">
+                📜 स्थायी डिजिटल अभिलेख प्रमाण पत्र (Official Registration Record)
               </div>
-              <p style="margin: 0 0 12px 0; font-size: 13px; color: #1e3a8a; line-height: 1.5;">
-                आपको किसी QR कोड को स्कैन करने की आवश्यकता नहीं है। आप नीचे दिए गए डायरेक्ट लिंक पर क्लिक करके सीधे अपना परिवार विवरण और सदस्य कार्ड देख सकते हैं:
+              <p style="margin: 0; font-size: 12px; color: #475569; line-height: 1.6;">
+                यह पुष्टि पत्र संघ के स्थायी डिजिटल रजिस्टर में दर्ज हो चुका है। कृपया अपने <strong>Family ID</strong> एवं नीचे दिए गए <strong>Member IDs</strong> को भविष्य के संदर्भ हेतु सुरक्षित रखें। किसी बाहरी वेबसाइट पर जाने की आवश्यकता नहीं है।
               </p>
-              <div style="text-align: center; margin-top: 14px;">
-                <a href="${directLink}" style="background-color: #0d5c3a; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                  👉 अपना परिवार पोर्टल खोलें (Open Family Portal)
-                </a>
-              </div>
             </div>
 
             <!-- Member IDs Table -->
@@ -584,14 +578,8 @@ export async function sendDirectFamilyMessageEmail({
             </p>
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 20px; font-size: 14px; line-height: 1.6; color: #1e293b; white-space: pre-wrap;">${message}</div>
 
-            <div style="text-align: center; margin: 24px 0;">
-              <a href="${directLink}" style="background-color: #0d5c3a; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: 700; font-size: 13px; display: inline-block;">
-                👉 परिवार प्रोफाइल खोलें (Open Family Portal)
-              </a>
-            </div>
-
-            <p style="font-size: 12px; color: #64748b; margin: 0;">
-              प्रेषक: ${senderName} (श्री ${sanghName})
+            <p style="font-size: 12px; color: #64748b; margin: 20px 0 0 0; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+              संदेश प्रेषक: <strong>${senderName}</strong> (श्री ${sanghName})
             </p>
           </td>
         </tr>
@@ -747,11 +735,15 @@ export async function sendFamilyIdCardsEmail({
             
             ${memberCardsHtml}
 
-            <!-- Direct Access Button -->
-            <div style="text-align: center; margin: 24px 0 12px 0;">
-              <a href="${directLink}" style="background-color: #0d5c3a; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                👉 डिजिटल परिवार प्रोफाइल व कार्ड खोलें (Open Digital ID)
-              </a>
+            <!-- Self-Contained Passbook Note (Zero Redirection) -->
+            <div style="background-color: #f8fafc; border: 2px dashed #0d5c3a; border-radius: 8px; padding: 16px 18px; margin: 22px 0 14px 0; text-align: center;">
+              <div style="font-size: 14px; font-weight: 700; color: #0d5c3a; margin-bottom: 6px;">
+                🔒 आधिकारिक डिजिटल परिवार पहचान पत्र (Permanent Digital Passbook)
+              </div>
+              <p style="font-size: 12px; color: #334155; margin: 0; line-height: 1.6;">
+                यह ईमेल ही आपका अधिकृत डिजिटल परिवार पहचान पत्र है। कृपया इस ईमेल को <strong>Star / Save</strong> कर लें अथवा इसका <strong>स्क्रीनशॉट (Screenshot)</strong> लेकर सुरक्षित रख लें।<br/>
+                <span style="color: #166534; font-weight: 600;">(किसी भी बाहरी लिंक या वेबसाइट पर जाने की आवश्यकता नहीं है)</span>
+              </p>
             </div>
 
             <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0; text-align: center;">

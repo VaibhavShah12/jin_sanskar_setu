@@ -247,6 +247,7 @@ export default function FamilyDetailClient({
 
   // Direct Family Email State
   const [showDirectEmailModal, setShowDirectEmailModal] = useState(false);
+  const [showPrintCardsModal, setShowPrintCardsModal] = useState(false);
   const [directSubject, setDirectSubject] = useState(`श्री ${family.sangh?.name || "संघ"} - परिवार संपर्क (${family.familyId})`);
   const [directMessage, setDirectMessage] = useState("");
   const [directSending, setDirectSending] = useState(false);
@@ -385,6 +386,16 @@ export default function FamilyDetailClient({
             >
               <i className="bi bi-file-earmark-diff text-warning-emphasis"></i>
               <span>📝 Refill Form / Request Correction (फॉर्म पुनः भरें)</span>
+            </button>
+
+            {/* View & Print ID Cards */}
+            <button
+              onClick={() => setShowPrintCardsModal(true)}
+              className="btn btn-outline-primary btn-sm px-3 shadow-sm d-flex align-items-center gap-1 fw-semibold text-dark"
+              title="View, print physical ID cards, or save as PDF to send on WhatsApp (No external redirection)"
+            >
+              <i className="bi bi-person-badge text-primary"></i>
+              <span>🪪 Print / View ID Cards (पहचान पत्र)</span>
             </button>
 
             {/* Email Family ID Cards */}
@@ -1632,6 +1643,211 @@ export default function FamilyDetailClient({
                   </div>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Printable ID Cards Modal */}
+      {showPrintCardsModal && (
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.65)", zIndex: 1060 }} role="dialog">
+          <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-content rounded-4 border-0 shadow-lg">
+              <div className="modal-header bg-dark text-white py-3 px-4 d-print-none">
+                <div className="d-flex align-items-center gap-2">
+                  <span className="fs-4">🪪</span>
+                  <div>
+                    <h5 className="modal-title fw-bold mb-0">
+                      पारिवारिक सदस्य पहचान पत्र (Official Member ID Cards)
+                    </h5>
+                    <small className="text-light opacity-75">
+                      Family ID: {family.familyId} • {family.members?.length || 0} सदस्य • श्री {family.sanghName || family.sangh?.name || "जैन श्वेताम्बर संघ"}
+                    </small>
+                  </div>
+                </div>
+                <div className="d-flex align-items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="btn btn-success btn-sm px-3 fw-bold shadow-sm d-flex align-items-center gap-1"
+                  >
+                    <i className="bi bi-printer-fill"></i>
+                    <span>🖨️ Print / Save as PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white"
+                    onClick={() => setShowPrintCardsModal(false)}
+                  ></button>
+                </div>
+              </div>
+
+              <div className="modal-body p-4 bg-light" id="printable-id-cards-area">
+                <style dangerouslySetInnerHTML={{ __html: `
+                  @media print {
+                    body {
+                      background: #ffffff !important;
+                      margin: 0 !important;
+                      padding: 0 !important;
+                    }
+                    /* Hide everything outside printable area */
+                    body > *:not(#__next):not(.modal) {
+                      display: none !important;
+                    }
+                    .modal-backdrop, .modal-header, .modal-footer, .d-print-none, .navbar, .btn {
+                      display: none !important;
+                    }
+                    .modal {
+                      position: static !important;
+                      display: block !important;
+                      background: transparent !important;
+                      padding: 0 !important;
+                      overflow: visible !important;
+                    }
+                    .modal-dialog {
+                      max-width: 100% !important;
+                      margin: 0 !important;
+                    }
+                    .modal-content {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }
+                    #printable-id-cards-area {
+                      background: #ffffff !important;
+                      padding: 10px !important;
+                    }
+                    .id-card-print-item {
+                      break-inside: avoid !important;
+                      page-break-inside: avoid !important;
+                      margin-bottom: 20px !important;
+                      -webkit-print-color-adjust: exact !important;
+                      print-color-adjust: exact !important;
+                    }
+                  }
+                `}} />
+
+                <div className="alert alert-info py-2 px-3 small d-flex align-items-center justify-content-between mb-4 d-print-none">
+                  <div>
+                    <i className="bi bi-info-circle-fill me-2"></i>
+                    <strong>प्रिंट या WhatsApp PDF:</strong> ऊपर <strong>'Print / Save as PDF'</strong> बटन पर क्लिक करें। इसे आप पेपर/प्लास्टिक कार्ड शीट पर प्रिंट कर सकते हैं या PDF सेव करके सीधे परिवार को WhatsApp पर भेज सकते हैं। इसमें कोई Vercel या बाहरी लिंक नहीं है।
+                  </div>
+                </div>
+
+                <div className="row g-4 justify-content-center">
+                  {(family.members || []).map((m: any) => (
+                    <div key={m.id || m.memberId} className="col-12 col-md-6 col-lg-4 d-flex justify-content-center id-card-print-item">
+                      <div
+                        className="card shadow-sm border border-2 border-success-subtle rounded-3 overflow-hidden bg-white w-100"
+                        style={{
+                          maxWidth: "360px",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                        }}
+                      >
+                        {/* Card Header */}
+                        <div
+                          className="px-3 py-2 text-white text-center"
+                          style={{
+                            background: "linear-gradient(135deg, #0d5c3a 0%, #15803d 100%)",
+                            color: "#ffffff",
+                          }}
+                        >
+                          <div className="d-flex align-items-center justify-content-between">
+                            <span className="fs-6">☸️</span>
+                            <div className="fw-bold text-uppercase" style={{ fontSize: "12px", letterSpacing: "0.5px" }}>
+                              श्री {family.sanghName || family.sangh?.name || "जैन श्वेताम्बर संघ"}
+                            </div>
+                            <span className="fs-6">☸️</span>
+                          </div>
+                          <div className="small opacity-75" style={{ fontSize: "10px" }}>
+                            जिन संस्कार सेतु • आधिकारिक पहचान पत्र
+                          </div>
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="card-body p-3">
+                          <div className="d-flex align-items-start justify-content-between mb-2">
+                            <div>
+                              <div className="fw-bold text-dark fs-6 mb-0">{m.name}</div>
+                              <span className="badge bg-light text-success border border-success-subtle px-2 py-1 small">
+                                {m.relationship === "HEAD" ? "मुखिया (HEAD)" : m.relationship}
+                              </span>
+                            </div>
+                            <div className="text-end">
+                              <span className="badge bg-success-subtle text-success-emphasis border border-success px-2 py-1 font-monospace fw-bold">
+                                {m.memberId}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="small text-muted mb-2">
+                            <div>आयु: <strong className="text-dark">{m.age} वर्ष</strong> • लिंग: {m.gender}</div>
+                            {m.dateOfBirth && (
+                              <div>जन्मतिथि: <span className="font-monospace text-dark">{new Date(m.dateOfBirth).toISOString().split("T")[0]}</span></div>
+                            )}
+                          </div>
+
+                          <div className="d-flex flex-wrap gap-1 mb-3">
+                            {m.bloodGroup && (
+                              <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                🩸 {m.bloodGroup}
+                              </span>
+                            )}
+                            {m.residenceLocation === "FOREIGN" ? (
+                              <span className="badge bg-warning-subtle text-warning-emphasis border border-warning px-2 py-1">
+                                ✈️ Foreign / NRI
+                              </span>
+                            ) : (
+                              <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                🇮🇳 Pune
+                              </span>
+                            )}
+                            {family.sect && (
+                              <span className="badge bg-secondary-subtle text-secondary-emphasis px-2 py-1">
+                                {family.sect === "OTHER" ? (family.otherSect || "अन्य") : family.sect}
+                              </span>
+                            )}
+                          </div>
+
+                          <hr className="my-2 opacity-25" />
+
+                          {/* Family & Address info */}
+                          <div style={{ fontSize: "11px" }} className="text-secondary">
+                            <div><strong>Family ID:</strong> <span className="font-monospace text-dark fw-bold">{family.familyId}</span></div>
+                            <div className="text-truncate">
+                              <strong>पता:</strong> {family.address}{family.lane ? `, शेरी: ${family.lane}` : ""}, {family.area}
+                            </div>
+                            {family.phone && (
+                              <div><strong>संपर्क:</strong> {family.phone}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card Footer */}
+                        <div className="bg-light px-3 py-1 border-top text-center" style={{ fontSize: "10px", color: "#6c757d" }}>
+                          अहिंसा परमो धर्मः • जीओ और जीने दो
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-footer bg-white py-2 px-4 d-print-none">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm px-3"
+                  onClick={() => setShowPrintCardsModal(false)}
+                >
+                  Close (बंद करें)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn btn-success btn-sm px-4 fw-bold shadow-sm"
+                >
+                  <i className="bi bi-printer-fill me-1"></i> Print / Save as PDF
+                </button>
+              </div>
             </div>
           </div>
         </div>
