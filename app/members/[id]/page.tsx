@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import React from "react";
 import { MEMBER_INTERESTS } from "@/lib/constants/interests";
+import { getSectLabel } from "@/components/FamilyForm";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +151,14 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
               <span className="text-muted small d-block">Blood Group</span>
               <strong className="fs-5 text-danger">
                 🩸 {member.bloodGroup}
+              </strong>
+            </div>
+          )}
+          {member.family.sect && (
+            <div className="col-6 col-md-3">
+              <span className="text-muted small d-block">Jain Sect (सम्प्रदाय)</span>
+              <strong className="fs-5 text-dark">
+                {getSectLabel(member.family.sect, member.family.otherSect)}
               </strong>
             </div>
           )}

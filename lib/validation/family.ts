@@ -181,6 +181,7 @@ export const MemberInputSchema = z
     wifeContact: z.string().optional().nullable(),
     residenceLocation: z.string().optional().nullable(),
     bloodGroup: z.string().optional().nullable(),
+    sect: z.string().optional().nullable(),
     pathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
     preferredDay: PreferredDayEnum.default("NO_PREFERENCE"),
     preferredTime: PreferredTimeEnum.default("NO_PREFERENCE"),
@@ -258,6 +259,8 @@ export const FamilyFormSchema = z
     area: z.string().min(2, "Area or locality is required").max(100),
     nativePlace: z.string().max(100).optional().nullable(),
     headBloodGroup: z.string().optional().nullable(),
+    sect: z.string().optional().nullable(),
+    otherSect: z.string().optional().nullable(),
     sanghId: z.string().min(1, "Please select a Sangh"),
     headOccupation: z.string().optional().nullable(),
     headPathshalaStatus: PathshalaStatusEnum.default("UNKNOWN"),
@@ -284,6 +287,15 @@ export const FamilyFormSchema = z
           path: ["headDateOfBirth"],
         });
       }
+    }
+
+    // Sect validation: If "OTHER" is selected, otherSect is required
+    if (data.sect === "OTHER" && (!data.otherSect || data.otherSect.trim().length < 2)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please specify the Sect name when selecting 'Others' (अन्य सम्प्रदाय का नाम दर्ज करना आवश्यक है).",
+        path: ["otherSect"],
+      });
     }
 
     // Phone deduplication: no two members can share the same WhatsApp number

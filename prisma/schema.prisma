@@ -205,6 +205,8 @@ model Family {
   lane             String?      // Lane / Gali / Road / Street (गल्ली / लेन / शेरी)
   area             String
   nativePlace      String?      // Native Village / Mul Gaam (मूल वतन / મૂળ ગામ)
+  sect             String?      // Jain Sect (फिरका / संप्रदाय: MURTIPUJAK, STHANAKWASI, DIGAMBAR, TERAPANTHI, OTHER)
+  otherSect        String?      // Custom sect name if sect is OTHER
   volunteerName    String?      // Volunteer name who added this family
   filledByMember   String?      // Family member name who filled / provided details
   sanghId          String
@@ -268,6 +270,7 @@ model Member {
   wifeName          String?           // Wife's name for married son
   wifeContact       String?           // Wife's contact / phone for married son
   residenceLocation String?           // IN_PUNE, OUT_OF_PUNE, FOREIGN (for son / daughter)
+  sect              String?           // Jain Sect (Murtipujak, Sthanakwasi, etc.)
   whatsappConsent          Boolean    @default(false)
   whatsappConsentDate      DateTime?
   whatsappConsentSource    String?    // e.g. "SURVEY_FORM", "VOLUNTEER_VERIFIED", "MEMBER_PORTAL", "ADMIN_UPDATE", "TRUSTEE_UPDATE"

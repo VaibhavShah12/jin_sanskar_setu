@@ -10,6 +10,7 @@ import { submitCorrectionRequestAction } from "@/lib/actions/member-form-actions
 import { sendDirectFamilyEmailAction } from "@/lib/actions/lavaajam-actions";
 import { getMemberCalculatedAge } from "@/lib/validation/family";
 import { MEMBER_INTERESTS } from "@/lib/constants/interests";
+import { getSectLabel } from "@/components/FamilyForm";
 
 interface FamilyDetailClientProps {
   family: any;
@@ -226,6 +227,15 @@ export default function FamilyDetailClient({
               <strong className="fs-6 text-dark">
                 <i className="bi bi-house-door text-primary me-1"></i>
                 {family.nativePlace}
+              </strong>
+            </div>
+          )}
+          {family.sect && (
+            <div className="col-12 col-sm-6 col-md-3">
+              <span className="text-muted small d-block">Jain Sect / Sampradaya</span>
+              <strong className="fs-6 text-dark">
+                <i className="bi bi-tag text-primary me-1"></i>
+                {getSectLabel(family.sect, family.otherSect)}
               </strong>
             </div>
           )}

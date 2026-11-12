@@ -37,6 +37,10 @@ export const FORM_TRANSLATIONS = {
     lane: "Lane / Gali / Road",
     address: "Flat / Building / Street Address",
     bloodGroup: "Blood Group",
+    sect: "Jain Sect / Sampradaya",
+    selectSect: "Select Sect",
+    otherSectLabel: "Specify Other Sect",
+    otherSectPlaceholder: "e.g. Shrimad Rajchandra, Kanji Swami, etc.",
     residenceLocation: "Current Location",
     nativePlace: "Native Village / Mul Gaam (મૂળ ગામ / मूल वतन)",
     nativePlacePlaceholder: "e.g. Patan, Palanpur, Sirohi, Kutch, Jamnagar",
@@ -82,6 +86,10 @@ export const FORM_TRANSLATIONS = {
     lane: "गली / लेन / मार्ग",
     address: "मकान / बिल्डिंग / गली का पूरा पता",
     bloodGroup: "रक्त समूह (ब्लड ग्रुप)",
+    sect: "जैन सम्प्रदाय / फिरका",
+    selectSect: "सम्प्रदाय चुनें",
+    otherSectLabel: "अन्य सम्प्रदाय का नाम",
+    otherSectPlaceholder: "उदा. श्रीमद् राजचंद्र, कांजी स्वामी, आदि",
     residenceLocation: "वर्तमान निवास स्थान",
     nativePlace: "मूल वतन / गाँव (મૂળ ગામ)",
     nativePlacePlaceholder: "उदा. पाटन, पालनपुर, सिरोही, कच्छ, जामनगर",
@@ -127,6 +135,10 @@ export const FORM_TRANSLATIONS = {
     lane: "શેરી / ગલી / માર્ગ",
     address: "ફ્લેટ / મકાન / શેરીનું સરનામું",
     bloodGroup: "બ્લડ ગ્રુપ",
+    sect: "જૈન સંપ્રદાય / ફિરકો",
+    selectSect: "સંપ્રદાય પસંદ કરો",
+    otherSectLabel: "અન્ય સંપ્રદાયનું નામ",
+    otherSectPlaceholder: "દા.ત. શ્રીમદ્ રાજચંદ્ર, કાનજી સ્વામી, વગેરે",
     residenceLocation: "હાલનું રહેઠાણ",
     nativePlace: "મૂળ ગામ / વતન",
     nativePlacePlaceholder: "દા.ત. પાટણ, પાલનપુર, સિરોહી, કચ્છ, જામનગર",
@@ -160,6 +172,18 @@ export function getOccupationLabel(val: string | null | undefined, t: any) {
     case "STUDENT": return t.occStudent || "Student";
     case "OTHER": return t.occOther || "Other";
     default: return val;
+  }
+}
+
+export function getSectLabel(sect: string | null | undefined, otherSect?: string | null) {
+  if (!sect) return "—";
+  switch (sect) {
+    case "MURTIPUJAK": return "Murtipujak (मूर्तिपूजक / મૂર્તિપૂજક)";
+    case "STHANAKWASI": return "Sthanakwasi (स्थानकवासी / સ્થાનકવાસી)";
+    case "DIGAMBAR": return "Digambar (दिगंबर / દિગંબર)";
+    case "TERAPANTHI": return "Terapanthi (तेरापंथी / તેરાપંથી)";
+    case "OTHER": return otherSect?.trim() ? `${otherSect.trim()} (Other)` : "Other (अन्य / અન્ય)";
+    default: return sect;
   }
 }
 
@@ -215,6 +239,8 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
     area: "",
     nativePlace: "",
     headBloodGroup: "",
+    sect: "",
+    otherSect: "",
     sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
     headOccupation: "",
     headPathshalaStatus: "UNKNOWN",
@@ -370,6 +396,10 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
     }
     if (!formData.sanghId) {
       setErrorMsg("Please select a Sangh.");
+      return false;
+    }
+    if (formData.sect === "OTHER" && (!formData.otherSect || formData.otherSect.trim().length < 2)) {
+      setErrorMsg("Please specify the Sect name when selecting 'Others' (अन्य सम्प्रदाय का नाम दर्ज करना आवश्यक है).");
       return false;
     }
     return true;
@@ -547,6 +577,8 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       area: "",
       nativePlace: "",
       headBloodGroup: "",
+      sect: "",
+      otherSect: "",
       sanghId: userSanghId || (sanghs.length > 0 ? sanghs[0].id : ""),
       headOccupation: "",
       headPathshalaStatus: "UNKNOWN",
@@ -995,6 +1027,55 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
               </select>
               <div className="form-text">Emergency medical assistance &amp; Sangh blood donor directory.</div>
             </div>
+
+            {/* Jain Sect / Sampradaya */}
+            <div className="col-12 col-md-6">
+              <label htmlFor="head-sect" className="form-label fw-semibold text-dark">
+                <i className="bi bi-tag text-primary me-1"></i>
+                {t.sect} (फिरका / सम्प्रदाय)
+              </label>
+              <select
+                id="head-sect"
+                className="form-select"
+                value={formData.sect || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData((prev) => ({
+                    ...prev,
+                    sect: val,
+                    otherSect: val === "OTHER" ? prev.otherSect : "",
+                  }));
+                }}
+              >
+                <option value="">{t.selectSect || "Select Sect"}</option>
+                <option value="MURTIPUJAK">Murtipujak (मूर्तिपूजक / મૂર્તિપૂજક)</option>
+                <option value="STHANAKWASI">Sthanakwasi (स्थानकवासी / સ્થાનકવાસી)</option>
+                <option value="DIGAMBAR">Digambar (दिगंबर / દિગંબર)</option>
+                <option value="TERAPANTHI">Terapanthi (तेरापंथी / તેરાપંથી)</option>
+                <option value="OTHER">Others (अन्य / અન્ય)</option>
+              </select>
+              <div className="form-text">Jain tradition / sect for sangh records &amp; rituals.</div>
+            </div>
+
+            {/* Other Sect (Conditional: only shown when Others is selected) */}
+            {formData.sect === "OTHER" && (
+              <div className="col-12 col-md-6 animate-fade-in">
+                <label htmlFor="head-other-sect" className="form-label fw-semibold text-dark">
+                  <i className="bi bi-pencil-square text-warning-emphasis me-1"></i>
+                  {t.otherSectLabel} <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="head-other-sect"
+                  className="form-control border-primary"
+                  placeholder={t.otherSectPlaceholder || "e.g. Shrimad Rajchandra, Kanji Swami, etc."}
+                  value={formData.otherSect || ""}
+                  onChange={(e) => setFormData({ ...formData, otherSect: e.target.value })}
+                  required
+                />
+                <div className="form-text text-primary">Specify your specific Jain tradition or panth.</div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1593,6 +1674,14 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                   <span className="text-muted d-block">{t.bloodGroup}:</span>
                   <span className="badge bg-danger-subtle text-danger border border-danger-subtle">
                     🩸 {formData.headBloodGroup}
+                  </span>
+                </div>
+              )}
+              {formData.sect && (
+                <div className="col-6 col-md-4">
+                  <span className="text-muted d-block">{t.sect}:</span>
+                  <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                    {getSectLabel(formData.sect, formData.otherSect)}
                   </span>
                 </div>
               )}
