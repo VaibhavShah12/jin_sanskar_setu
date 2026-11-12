@@ -3,7 +3,11 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createFamilyAction, checkMobileAvailabilityAction } from "@/lib/actions/family-actions";
+import {
+  createFamilyAction,
+  checkMobileAvailabilityAction,
+  lookupCrossSanghContactAction,
+} from "@/lib/actions/family-actions";
 import {
   FamilyFormValues,
   MemberInput,
@@ -285,6 +289,68 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       setCheckingMobile(false);
     }
   }, [formData.mobile, formData.headWhatsappNumber]);
+
+  // Cross-Sangh match state for members (e.g. married daughter already surveyed in another Sangh)
+  const [crossSanghMatches, setCrossSanghMatches] = useState<Record<number, any>>({});
+  const [checkingContactIdx, setCheckingContactIdx] = useState<number | null>(null);
+
+  const checkMemberContactForCrossSangh = async (idx: number, contact: string) => {
+    const raw = contact.replace(/[^0-9]/g, "");
+    if (raw.length < 10) {
+      setCrossSanghMatches((prev) => {
+        const copy = { ...prev };
+        delete copy[idx];
+        return copy;
+      });
+      return;
+    }
+
+    setCheckingContactIdx(idx);
+    try {
+      const res = await lookupCrossSanghContactAction(raw);
+      if (res.found && res.member) {
+        setCrossSanghMatches((prev) => ({
+          ...prev,
+          [idx]: res.member,
+        }));
+      } else {
+        setCrossSanghMatches((prev) => {
+          const copy = { ...prev };
+          delete copy[idx];
+          return copy;
+        });
+      }
+    } catch {
+      // ignore network errors
+    } finally {
+      setCheckingContactIdx(null);
+    }
+  };
+
+  const applyCrossSanghAutoMap = (idx: number, match: any) => {
+    setFormData((prev) => {
+      const updated = [...prev.members];
+      const member = { ...updated[idx] };
+      member.name = match.name || member.name;
+      member.age = match.age || member.age;
+      member.gender = match.gender || member.gender;
+      member.dateOfBirth = match.dateOfBirth || member.dateOfBirth;
+      member.bloodGroup = match.bloodGroup || member.bloodGroup;
+      member.husbandName = match.husbandName || member.husbandName;
+      member.wifeName = match.wifeName || member.wifeName;
+      member.residenceLocation = match.residenceLocation || member.residenceLocation || "IN_PUNE";
+      member.maritalStatus = match.maritalStatus || "MARRIED";
+      updated[idx] = member;
+      return { ...prev, members: updated };
+    });
+
+    // Dismiss banner once auto-mapped
+    setCrossSanghMatches((prev) => {
+      const copy = { ...prev };
+      delete copy[idx];
+      return copy;
+    });
+  };
 
   // Dynamic Members State
   const addMember = () => {
@@ -1457,7 +1523,14 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                               className="form-control form-control-sm"
                               placeholder="Wife's contact number (optional)"
                               value={member.wifeContact || ""}
-                              onChange={(e) => updateMember(idx, "wifeContact", e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                updateMember(idx, "wifeContact", val);
+                                if (val.replace(/[^0-9]/g, "").length >= 10) {
+                                  checkMemberContactForCrossSangh(idx, val);
+                                }
+                              }}
+                              onBlur={(e) => checkMemberContactForCrossSangh(idx, e.target.value)}
                             />
                           </div>
                         </>
@@ -1510,7 +1583,14 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                               className="form-control form-control-sm border-primary"
                               placeholder="10-digit mobile number"
                               value={member.whatsappNumber || ""}
-                              onChange={(e) => updateMember(idx, "whatsappNumber", e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                updateMember(idx, "whatsappNumber", val);
+                                if (val.replace(/[^0-9]/g, "").length >= 10) {
+                                  checkMemberContactForCrossSangh(idx, val);
+                                }
+                              }}
+                              onBlur={(e) => checkMemberContactForCrossSangh(idx, e.target.value)}
                               required
                             />
                             <div className="form-text small text-primary">Required for married daughter/sister.</div>
@@ -1531,8 +1611,46 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                             className="form-control form-control-sm"
                             placeholder="Phone / WhatsApp (optional)"
                             value={member.whatsappNumber || ""}
-                            onChange={(e) => updateMember(idx, "whatsappNumber", e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateMember(idx, "whatsappNumber", val);
+                              if (val.replace(/[^0-9]/g, "").length >= 10) {
+                                checkMemberContactForCrossSangh(idx, val);
+                              }
+                            }}
+                            onBlur={(e) => checkMemberContactForCrossSangh(idx, e.target.value)}
                           />
+                        </div>
+                      )}
+
+                      {/* Cross-Sangh Match Detected Alert Banner */}
+                      {crossSanghMatches[idx] && (
+                        <div className="col-12 animate-fade-in">
+                          <div className="alert alert-info py-2 px-3 mb-1 small d-flex justify-content-between align-items-center flex-wrap gap-2 border-info shadow-xs rounded-3">
+                            <div>
+                              <div className="fw-bold text-dark d-flex align-items-center gap-1">
+                                <i className="bi bi-link-45deg text-primary fs-5"></i>
+                                <span>Cross-Sangh Record Found (अन्य संघ में पंजीकृत सदस्य):</span>
+                              </div>
+                              <div className="text-secondary mt-1">
+                                This contact belongs to <strong>{crossSanghMatches[idx].name}</strong> ({crossSanghMatches[idx].relationship}) in <strong>{crossSanghMatches[idx].sanghName}</strong> (Family #{crossSanghMatches[idx].familyId}, Head: {crossSanghMatches[idx].headName}).
+                                {crossSanghMatches[idx].husbandName && (
+                                  <span> • Husband: <strong>{crossSanghMatches[idx].husbandName}</strong></span>
+                                )}
+                                {crossSanghMatches[idx].bloodGroup && (
+                                  <span> • Blood Group: <strong>{crossSanghMatches[idx].bloodGroup}</strong></span>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => applyCrossSanghAutoMap(idx, crossSanghMatches[idx])}
+                              className="btn btn-sm btn-info text-dark fw-bold shadow-xs d-flex align-items-center gap-1"
+                            >
+                              <i className="bi bi-magic"></i>
+                              <span>Auto-Map &amp; Link Details (स्वतः विवरण भरें)</span>
+                            </button>
+                          </div>
                         </div>
                       )}
 

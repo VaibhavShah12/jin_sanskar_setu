@@ -8,6 +8,8 @@ import {
   updateSanghLavaajamFeeAction,
   sendSanghBroadcastEmailAction,
   sendDirectFamilyEmailAction,
+  deleteLavaajamRecordAction,
+  resendLavaajamReceiptAction,
 } from "@/lib/actions/lavaajam-actions";
 
 export interface LavaajamFamilyItem {
@@ -94,6 +96,8 @@ export default function LavaajamPortalClient({
   const [formReceiptPhoto, setFormReceiptPhoto] = useState<string | null>(null);
   const [formEmail, setFormEmail] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -491,6 +495,79 @@ export default function LavaajamPortalClient({
       setSaveError(err?.message || "An unexpected error occurred.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteLavaajam = async () => {
+    if (!editingFamily || !editingFamily.lavaajam) return;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the Lavaajam payment record for ${editingFamily.headName} (${editingFamily.familyId}) for year ${selectedYear}? This will revert the family's status to Pending/Unpaid.`
+    );
+    if (!confirmDelete) return;
+
+    setDeleting(true);
+    setSaveError(null);
+    try {
+      const res = await deleteLavaajamRecordAction({
+        recordId: editingFamily.lavaajam.id,
+        familyId: editingFamily.id,
+        year: selectedYear,
+      });
+
+      if (!res.success) {
+        setSaveError(res.error || "Failed to delete record.");
+        return;
+      }
+
+      // Update state: remove lavaajam record
+      const wasPaid = editingFamily.lavaajam.status === "PAID";
+      const oldAmount = wasPaid ? (editingFamily.lavaajam.amount || 0) : 0;
+
+      setFamilies((prev) =>
+        prev.map((f) => (f.id === editingFamily.id ? { ...f, lavaajam: null } : f))
+      );
+
+      setSummary((prev) => {
+        const newPaid = wasPaid ? Math.max(0, prev.paidFamilies - 1) : prev.paidFamilies;
+        const newPending = wasPaid ? prev.pendingFamilies + 1 : prev.pendingFamilies;
+        const newTotal = prev.totalAmountCollected - oldAmount;
+        return {
+          ...prev,
+          paidFamilies: newPaid,
+          pendingFamilies: newPending,
+          totalAmountCollected: Math.max(0, newTotal),
+          paidPercentage: prev.totalFamilies > 0 ? Math.round((newPaid / prev.totalFamilies) * 100) : 0,
+        };
+      });
+
+      setEditingFamily(null);
+    } catch (err: any) {
+      setSaveError(err?.message || "Failed to delete Lavaajam record.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleResendReceipt = async (recipientEmail?: string) => {
+    if (!editingFamily || !editingFamily.lavaajam) return;
+    setResendingEmail(true);
+    setSaveError(null);
+    setSaveSuccessMsg(null);
+    try {
+      const res = await resendLavaajamReceiptAction({
+        familyId: editingFamily.id,
+        year: selectedYear,
+        recipientEmail: recipientEmail || formEmail || editingFamily.email || undefined,
+      });
+      if (res.success) {
+        setSaveSuccessMsg(res.message || "Receipt successfully emailed!");
+      } else {
+        setSaveError(res.error || "Failed to send receipt email.");
+      }
+    } catch (err: any) {
+      setSaveError(err?.message || "Failed to send receipt email.");
+    } finally {
+      setResendingEmail(false);
     }
   };
 
@@ -901,6 +978,25 @@ export default function LavaajamPortalClient({
 
                           {isPaid && (
                             <>
+                              {fam.email && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const ok = window.confirm(`Email official Lavaajam receipt #${fam.lavaajam?.receiptNumber || ""} to ${fam.email}?`);
+                                    if (!ok) return;
+                                    const res = await resendLavaajamReceiptAction({ familyId: fam.id, year: selectedYear, recipientEmail: fam.email || undefined });
+                                    if (res.success) {
+                                      alert(res.message || "Receipt emailed successfully!");
+                                    } else {
+                                      alert(res.error || "Failed to send receipt email.");
+                                    }
+                                  }}
+                                  className="btn btn-sm btn-outline-primary px-2 shadow-xs"
+                                  title={`Email official Lavaajam receipt to ${fam.email}`}
+                                >
+                                  <i className="bi bi-envelope-check"></i>
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleShareWhatsApp(fam)}
@@ -1174,30 +1270,59 @@ export default function LavaajamPortalClient({
                   </div>
                 </div>
 
-                <div className="modal-footer bg-light py-2 px-4 d-flex justify-content-between">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm px-3"
-                    onClick={() => setEditingFamily(null)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="btn btn-primary btn-sm px-4 fw-semibold shadow-xs"
-                  >
-                    {saving ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                        Saving Record...
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-check2 me-1"></i> Save Lavaajam Record
-                      </>
+                <div className="modal-footer bg-light py-2 px-4 d-flex justify-content-between flex-wrap gap-2">
+                  <div>
+                    {editingFamily.lavaajam && (
+                      <button
+                        type="button"
+                        disabled={deleting || saving}
+                        onClick={handleDeleteLavaajam}
+                        className="btn btn-outline-danger btn-sm d-flex align-items-center gap-1 shadow-xs"
+                        title="Delete this Lavaajam record and revert status to Unpaid"
+                      >
+                        <i className="bi bi-trash"></i>
+                        <span>{deleting ? "Deleting..." : "Delete Record (रसीद हटाएं)"}</span>
+                      </button>
                     )}
-                  </button>
+                  </div>
+
+                  <div className="d-flex align-items-center gap-2">
+                    {editingFamily.lavaajam?.status === "PAID" && (
+                      <button
+                        type="button"
+                        disabled={resendingEmail || saving}
+                        onClick={() => handleResendReceipt()}
+                        className="btn btn-outline-info btn-sm d-flex align-items-center gap-1 shadow-xs text-dark fw-semibold"
+                        title="Email receipt voucher to family"
+                      >
+                        <i className="bi bi-envelope-check"></i>
+                        <span>{resendingEmail ? "Sending..." : "📧 Resend Receipt Email"}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm px-3"
+                      onClick={() => setEditingFamily(null)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving || deleting}
+                      className="btn btn-primary btn-sm px-4 fw-semibold shadow-xs"
+                    >
+                      {saving ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                          Saving Record...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-check2 me-1"></i> Save Lavaajam Record
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

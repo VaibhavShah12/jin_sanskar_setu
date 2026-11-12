@@ -7,7 +7,8 @@ import { generateFamilyId, generateMemberIds } from "@/lib/ids/generator";
 import { checkFamilyDuplicates } from "@/lib/duplicates/checker";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { triggerBackgroundSync } from "@/lib/google-sheets/sync";
-import { sendFamilyRegistrationEmail } from "@/lib/email/mailer";
+import { sendFamilyRegistrationEmail, sendFamilyIdCardsEmail } from "@/lib/email/mailer";
+import { revalidatePath } from "next/cache";
 
 export interface CreateFamilyResult {
   success: boolean;
@@ -475,5 +476,376 @@ export async function checkMobileAvailabilityAction(mobile: string): Promise<{
     return { exists: false };
   } catch {
     return { exists: false };
+  }
+}
+
+/**
+ * Sends official Digital Family ID Cards to the registered email address.
+ */
+export async function sendFamilyIdCardsEmailAction(
+  familyDbId: string,
+  overrideEmail?: string
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized. Please log in." };
+  }
+
+  try {
+    const family = await prisma.family.findUnique({
+      where: { id: familyDbId },
+      include: {
+        sangh: true,
+        members: {
+          where: { status: "ACTIVE" },
+          orderBy: [{ relationship: "asc" }, { age: "desc" }],
+        },
+      },
+    });
+
+    if (!family) {
+      return { success: false, error: "Family not found." };
+    }
+
+    if (user.role === "TRUSTEE" && family.sanghId !== user.sanghId) {
+      return {
+        success: false,
+        error: "Permission Denied: You can only send ID cards to families in your assigned Sangh.",
+      };
+    }
+
+    const targetEmail = overrideEmail?.trim() || family.email?.trim();
+    if (!targetEmail || !targetEmail.includes("@")) {
+      return {
+        success: false,
+        error: `No valid email address registered for family ${family.familyId}.`,
+      };
+    }
+
+    const membersData = family.members.map((m) => ({
+      memberId: m.memberId,
+      name: m.name,
+      relationship: m.relationship,
+      age: m.age,
+      gender: m.gender,
+      bloodGroup: m.bloodGroup,
+      residenceLocation: m.residenceLocation,
+      dateOfBirth: m.dateOfBirth ? m.dateOfBirth.toISOString().split("T")[0] : null,
+    }));
+
+    const result = await sendFamilyIdCardsEmail({
+      to: targetEmail,
+      headName: family.headName,
+      familyId: family.familyId,
+      sanghName: family.sangh.name,
+      sanghPrefix: family.sangh.prefix,
+      address: family.address,
+      lane: family.lane,
+      area: family.area,
+      sect: family.sect,
+      members: membersData,
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error || "Failed to dispatch email." };
+    }
+
+    await logAuditEvent({
+      action: "FAMILY_ID_CARDS_EMAILED",
+      entityType: "Family",
+      entityId: family.id,
+      performedBy: user.username,
+      metadata: {
+        familyId: family.familyId,
+        recipient: targetEmail,
+        totalMembers: family.members.length,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Family ID Cards successfully emailed to ${targetEmail}!`,
+    };
+  } catch (err: any) {
+    console.error("[SEND_FAMILY_ID_CARDS_ERROR]:", err);
+    return { success: false, error: err?.message || "Failed to send Family ID Cards." };
+  }
+}
+
+export interface UpdateFamilyAndMembersPayload {
+  familyId: string; // Family DB ID
+  headName: string;
+  mobile?: string | null;
+  email: string;
+  address: string;
+  lane?: string | null;
+  area: string;
+  nativePlace?: string | null;
+  sect?: string | null;
+  otherSect?: string | null;
+  headOccupation?: string | null;
+  headBloodGroup?: string | null;
+  headDateOfBirth?: string | null;
+  headAge?: number;
+  members: Array<{
+    id?: string;
+    name: string;
+    dateOfBirth?: string | null;
+    age: number;
+    gender: "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
+    relationship: string;
+    maritalStatus?: string | null;
+    wifeName?: string | null;
+    wifeContact?: string | null;
+    husbandName?: string | null;
+    residenceLocation?: string | null;
+    bloodGroup?: string | null;
+    whatsappNumber?: string | null;
+    occupation?: string | null;
+  }>;
+}
+
+/**
+ * Directly updates an existing Family and its Member records.
+ * Allows updating blood group, foreigner location, sect, lane, marital status, wife/husband info,
+ * and adding new members/grandchildren WITHOUT deleting any existing data or resetting IDs.
+ */
+export async function updateFamilyAndMembersAction(
+  payload: UpdateFamilyAndMembersPayload
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized. Please log in." };
+  }
+
+  try {
+    const family = await prisma.family.findUnique({
+      where: { id: payload.familyId },
+      include: {
+        sangh: true,
+        members: { where: { status: "ACTIVE" } },
+      },
+    });
+
+    if (!family) {
+      return { success: false, error: "Family not found." };
+    }
+
+    // Role check: Volunteers/Trustees can only edit their own Sangh
+    if (
+      (user.role === "VOLUNTEER" && user.sanghId && user.sanghId !== family.sanghId) ||
+      (user.role === "TRUSTEE" && user.sanghId !== family.sanghId)
+    ) {
+      return { success: false, error: "Access Denied: You can only edit families in your assigned Sangh." };
+    }
+
+    const rawMobile = payload.mobile || family.mobile || "";
+    const normalizedMobile = rawMobile ? normalizeMobile(rawMobile) : null;
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Update Family record
+      await tx.family.update({
+        where: { id: family.id },
+        data: {
+          headName: payload.headName.trim(),
+          mobile: rawMobile.trim(),
+          normalizedMobile: normalizedMobile || family.normalizedMobile,
+          email: payload.email.trim().toLowerCase(),
+          address: payload.address.trim(),
+          lane: payload.lane?.trim() || null,
+          area: payload.area.trim(),
+          nativePlace: payload.nativePlace?.trim() || null,
+          sect: payload.sect?.trim() || null,
+          otherSect: payload.sect === "OTHER" ? (payload.otherSect?.trim() || null) : null,
+          updatedBy: user.username,
+        },
+      });
+
+      // 2. Separate existing members vs newly added members
+      const existingMembers = payload.members.filter((m) => Boolean(m.id));
+      const newMembers = payload.members.filter((m) => !m.id && m.name.trim().length >= 2);
+
+      // Update existing members
+      for (const m of existingMembers) {
+        if (!m.id) continue;
+        await tx.member.update({
+          where: { id: m.id },
+          data: {
+            name: m.name.trim(),
+            normalizedName: normalizeName(m.name),
+            dateOfBirth: m.dateOfBirth ? new Date(m.dateOfBirth) : null,
+            age: m.age,
+            gender: m.gender,
+            relationship: m.relationship as any,
+            maritalStatus: (m.maritalStatus as any) || "UNMARRIED",
+            wifeName: m.wifeName?.trim() || null,
+            wifeContact: m.wifeContact ? normalizeMobile(m.wifeContact) : null,
+            husbandName: m.husbandName?.trim() || null,
+            residenceLocation: m.residenceLocation || null,
+            bloodGroup: m.bloodGroup || null,
+            whatsappNumber: m.whatsappNumber ? normalizeMobile(m.whatsappNumber) : null,
+            occupation: m.occupation?.trim() || null,
+            updatedBy: user.username,
+          },
+        });
+      }
+
+      // Update Head Member record if head-specific details changed
+      if (family.headMemberId) {
+        await tx.member.update({
+          where: { id: family.headMemberId },
+          data: {
+            name: payload.headName.trim(),
+            normalizedName: normalizeName(payload.headName),
+            age: payload.headAge !== undefined ? payload.headAge : undefined,
+            dateOfBirth: payload.headDateOfBirth ? new Date(payload.headDateOfBirth) : undefined,
+            bloodGroup: payload.headBloodGroup || undefined,
+            occupation: payload.headOccupation || undefined,
+            updatedBy: user.username,
+          },
+        });
+      }
+
+      // 3. Create any newly added members with generated Member IDs
+      if (newMembers.length > 0) {
+        const newMemberIds = await generateMemberIds(
+          tx,
+          family.sanghId,
+          family.sangh.prefix,
+          newMembers.length
+        );
+
+        for (let i = 0; i < newMembers.length; i++) {
+          const nm = newMembers[i];
+          const mid = newMemberIds[i];
+
+          await tx.member.create({
+            data: {
+              memberId: mid,
+              familyId: family.id,
+              sanghId: family.sanghId,
+              name: nm.name.trim(),
+              normalizedName: normalizeName(nm.name),
+              dateOfBirth: nm.dateOfBirth ? new Date(nm.dateOfBirth) : null,
+              age: nm.age,
+              gender: nm.gender,
+              relationship: nm.relationship as any,
+              maritalStatus: (nm.maritalStatus as any) || "UNMARRIED",
+              wifeName: nm.wifeName?.trim() || null,
+              wifeContact: nm.wifeContact ? normalizeMobile(nm.wifeContact) : null,
+              husbandName: nm.husbandName?.trim() || null,
+              residenceLocation: nm.residenceLocation || null,
+              bloodGroup: nm.bloodGroup || null,
+              whatsappNumber: nm.whatsappNumber ? normalizeMobile(nm.whatsappNumber) : null,
+              occupation: nm.occupation?.trim() || null,
+              status: "ACTIVE",
+              createdBy: user.username,
+              updatedBy: user.username,
+            },
+          });
+
+          await tx.googleSheetSync.create({
+            data: {
+              memberId: mid,
+              status: "PENDING",
+            },
+          });
+        }
+
+        // Trigger background sync for new members
+        triggerBackgroundSync(newMemberIds, user.username);
+      }
+
+      // Audit Log
+      await logAuditEvent({
+        action: "FAMILY_UPDATED",
+        entityType: "Family",
+        entityId: family.id,
+        performedBy: user.username,
+        metadata: {
+          familyId: family.familyId,
+          headName: payload.headName,
+          updatedMembersCount: existingMembers.length,
+          newMembersCount: newMembers.length,
+        },
+      }, tx);
+    });
+
+    revalidatePath(`/families/${payload.familyId}`);
+    revalidatePath("/families");
+    revalidatePath("/members");
+
+    return {
+      success: true,
+      message: "Family household and member details updated successfully!",
+    };
+  } catch (err: any) {
+    console.error("[UPDATE_FAMILY_ERROR]:", err);
+    return {
+      success: false,
+      error: err?.message || "Failed to update family details.",
+    };
+  }
+}
+
+/**
+ * Live lookup for a contact number across all Sanghs in the database.
+ * Detects if a married daughter, wife, or member is already registered in another Sangh.
+ */
+export async function lookupCrossSanghContactAction(contactNumber: string) {
+  try {
+    const normalized = normalizeMobile(contactNumber);
+    if (!normalized || normalized.length < 10) {
+      return { found: false };
+    }
+
+    // Look for any active member matching whatsappNumber or wifeContact or family mobile
+    const matchedMember = await prisma.member.findFirst({
+      where: {
+        OR: [
+          { whatsappNumber: normalized },
+          { wifeContact: normalized },
+        ],
+        status: "ACTIVE",
+      },
+      include: {
+        family: {
+          include: { sangh: true },
+        },
+      },
+    });
+
+    if (matchedMember) {
+      return {
+        found: true,
+        type: "MEMBER" as const,
+        member: {
+          id: matchedMember.id,
+          memberId: matchedMember.memberId,
+          name: matchedMember.name,
+          age: matchedMember.age,
+          gender: matchedMember.gender,
+          dateOfBirth: matchedMember.dateOfBirth
+            ? matchedMember.dateOfBirth.toISOString().split("T")[0]
+            : null,
+          relationship: matchedMember.relationship,
+          maritalStatus: matchedMember.maritalStatus,
+          husbandName: matchedMember.husbandName,
+          wifeName: matchedMember.wifeName,
+          bloodGroup: matchedMember.bloodGroup,
+          residenceLocation: matchedMember.residenceLocation,
+          familyId: matchedMember.family.familyId,
+          headName: matchedMember.family.headName,
+          sanghId: matchedMember.family.sanghId,
+          sanghName: matchedMember.family.sangh.name,
+          sanghPrefix: matchedMember.family.sangh.prefix,
+        },
+      };
+    }
+
+    return { found: false };
+  } catch (err) {
+    console.warn("lookupCrossSanghContactAction error:", err);
+    return { found: false };
   }
 }

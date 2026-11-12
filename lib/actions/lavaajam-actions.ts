@@ -595,3 +595,173 @@ export async function sendDirectFamilyEmailAction({
     return { success: false, error: err?.message || "Failed to send email." };
   }
 }
+
+/**
+ * Deletes a Lavaajam payment record and resets the family's payment status to PENDING.
+ * Accessible ONLY by Trustees (for their own Sangh) and Admins.
+ */
+export async function deleteLavaajamRecordAction({
+  recordId,
+  familyId,
+  year,
+}: {
+  recordId?: string;
+  familyId?: string;
+  year?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized. Please log in." };
+  }
+
+  if (user.role !== "TRUSTEE" && user.role !== "ADMIN") {
+    return {
+      success: false,
+      error: "Access Denied: Only Trustees and Admins can delete Lavaajam records.",
+    };
+  }
+
+  try {
+    let record = null;
+    if (recordId) {
+      record = await prisma.lavaajamRecord.findUnique({
+        where: { id: recordId },
+        include: { family: true, sangh: true },
+      });
+    } else if (familyId && year) {
+      record = await prisma.lavaajamRecord.findFirst({
+        where: {
+          familyId,
+          year,
+        },
+        include: { family: true, sangh: true },
+      });
+    }
+
+    if (!record) {
+      return { success: false, error: "Lavaajam record not found." };
+    }
+
+    // Role check: Trustees can only delete records in their own Sangh
+    if (user.role === "TRUSTEE" && record.family.sanghId !== user.sanghId) {
+      return {
+        success: false,
+        error: "Permission Denied: You can only delete records within your assigned Sangh.",
+      };
+    }
+
+    await prisma.lavaajamRecord.delete({
+      where: { id: record.id },
+    });
+
+    await logAuditEvent({
+      action: "LAVAAJAM_RECORD_DELETED",
+      entityType: "Family",
+      entityId: record.familyId,
+      performedBy: user.username,
+      metadata: {
+        recordId: record.id,
+        familyId: record.family.familyId,
+        headName: record.family.headName,
+        year: record.year,
+        receiptNumber: record.receiptNumber,
+        amount: record.amount,
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[DELETE_LAVAAJAM_ERROR]:", err);
+    return { success: false, error: err?.message || "Failed to delete Lavaajam record." };
+  }
+}
+
+/**
+ * Resends / manually dispatches a Lavaajam payment receipt email.
+ */
+export async function resendLavaajamReceiptAction({
+  familyId,
+  year,
+  recipientEmail,
+}: {
+  familyId: string;
+  year: string;
+  recipientEmail?: string;
+}): Promise<{ success: boolean; error?: string; message?: string }> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized. Please log in." };
+  }
+
+  if (user.role !== "TRUSTEE" && user.role !== "ADMIN") {
+    return {
+      success: false,
+      error: "Access Denied: Only Trustees and Admins can send Lavaajam receipts.",
+    };
+  }
+
+  try {
+    const trimmed = familyId.trim();
+    const family = await prisma.family.findFirst({
+      where: {
+        OR: [{ id: trimmed }, { familyId: trimmed.toUpperCase() }, { familyId: trimmed }],
+      },
+      include: {
+        sangh: true,
+        lavaajamRecords: {
+          where: { year },
+        },
+      },
+    });
+
+    if (!family) {
+      return { success: false, error: `Family not found for ID "${familyId}".` };
+    }
+
+    if (user.role === "TRUSTEE" && family.sanghId !== user.sanghId) {
+      return { success: false, error: "You can only manage families within your assigned Sangh." };
+    }
+
+    const record = family.lavaajamRecords[0];
+    if (!record || record.status !== "PAID") {
+      return {
+        success: false,
+        error: `No paid Lavaajam record found for family ${family.familyId} for year ${year}.`,
+      };
+    }
+
+    const targetEmail = recipientEmail?.trim() || family.email?.trim();
+    if (!targetEmail || !targetEmail.includes("@")) {
+      return {
+        success: false,
+        error: `No valid email address available. Please provide an email address.`,
+      };
+    }
+
+    const emailRes = await sendLavaajamReceiptEmail({
+      to: targetEmail,
+      headName: family.headName,
+      familyId: family.familyId,
+      sanghName: family.sangh.name,
+      receiptNumber: record.receiptNumber || `REC-${record.id.slice(-6)}`,
+      amount: record.amount || 0,
+      year: record.year,
+      paymentDate: record.paymentDate ? record.paymentDate.toISOString() : new Date().toISOString(),
+      paymentMode: record.paymentMode || "CASH",
+      receiverName: record.receiverName || user.username,
+      notes: record.notes,
+    });
+
+    if (!emailRes.success) {
+      return { success: false, error: emailRes.error || "Failed to send email." };
+    }
+
+    return {
+      success: true,
+      message: `Lavaajam receipt #${record.receiptNumber || record.id} successfully emailed to ${targetEmail}.`,
+    };
+  } catch (err: any) {
+    console.error("[RESEND_LAVAAJAM_RECEIPT_ERROR]:", err);
+    return { success: false, error: err?.message || "Failed to dispatch email receipt." };
+  }
+}

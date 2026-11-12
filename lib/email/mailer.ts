@@ -607,3 +607,177 @@ export async function sendDirectFamilyMessageEmail({
     text: `जय जिनेन्द्र ${headName} जी,\n\n${message}\n\nपोर्टल लिंक: ${directLink}\n\nप्रेषक: ${senderName}`,
   });
 }
+
+/**
+ * 4. FAMILY ID CARDS EMAIL
+ * Dispatches official digital family ID cards for all family members to the registered head email.
+ */
+export async function sendFamilyIdCardsEmail({
+  to,
+  headName,
+  familyId,
+  sanghName,
+  sanghPrefix,
+  address,
+  lane,
+  area,
+  sect,
+  members,
+}: {
+  to: string;
+  headName: string;
+  familyId: string;
+  sanghName: string;
+  sanghPrefix: string;
+  address: string;
+  lane?: string | null;
+  area: string;
+  sect?: string | null;
+  members: Array<{
+    memberId: string;
+    name: string;
+    relationship: string;
+    age: number;
+    gender: string;
+    bloodGroup?: string | null;
+    residenceLocation?: string | null;
+    dateOfBirth?: string | null;
+  }>;
+}): Promise<SendEmailResult> {
+  const baseUrl = getAppBaseUrl();
+  const directLink = `${baseUrl}/member-portal?familyId=${encodeURIComponent(familyId)}`;
+  const subject = `जय जिनेन्द्र - आपके परिवार के डिजिटल पहचान पत्र (Digital Family ID Cards) [${familyId}]`;
+
+  const memberCardsHtml = members
+    .map(
+      (m) => `
+      <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-left: 5px solid #0d5c3a; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+          <tr>
+            <td style="vertical-align: top;">
+              <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.5px;">
+                ${sanghPrefix} • ${m.relationship === 'HEAD' ? 'मुखिया (HEAD)' : m.relationship}
+              </div>
+              <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 2px 0 4px 0;">
+                ${m.name}
+              </div>
+              <div style="color: #475569; font-size: 12px;">
+                आयु: <strong>${m.age} वर्ष</strong> • लिंग: ${m.gender}
+                ${m.dateOfBirth ? ` • जन्मतिथि: <span style="font-family: monospace;">${m.dateOfBirth}</span>` : ''}
+              </div>
+            </td>
+            <td style="text-align: right; vertical-align: top;">
+              <div style="display: inline-block; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 4px 8px; font-family: monospace; font-size: 13px; font-weight: 700; color: #065f46;">
+                ${m.memberId}
+              </div>
+              ${
+                m.bloodGroup
+                  ? `<div style="margin-top: 4px;"><span style="display: inline-block; background-color: #fee2e2; border: 1px solid #fecaca; color: #991b1b; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">🩸 ${m.bloodGroup}</span></div>`
+                  : ''
+              }
+              ${
+                m.residenceLocation === 'FOREIGN'
+                  ? `<div style="margin-top: 4px;"><span style="display: inline-block; background-color: #fef2f2; border: 1px solid #f87171; color: #b91c1c; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px;">✈️ Foreign / NRI</span></div>`
+                  : ''
+              }
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
+    )
+    .join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="hi">
+    <head>
+      <meta charset="utf-8">
+      <title>${subject}</title>
+    </head>
+    <body style="font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #0f172a;">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 620px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07); border: 1px solid #e2e8f0;">
+        
+        <!-- Header -->
+        <tr>
+          <td style="background: linear-gradient(135deg, #0d5c3a 0%, #15803d 100%); padding: 26px 20px; text-align: center; color: #ffffff;">
+            <div style="font-size: 26px; margin-bottom: 4px;">☸️</div>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #ffffff;">श्री ${sanghName}</h1>
+            <p style="margin: 4px 0 0 0; font-size: 13px; color: #dcfce7; font-weight: 500;">
+              जिन संस्कार सेतु • आधिकारिक पारिवारिक डिजिटल पहचान पत्र
+            </p>
+          </td>
+        </tr>
+
+        <!-- Main Body -->
+        <tr>
+          <td style="padding: 24px;">
+            <p style="font-size: 15px; margin: 0 0 12px 0; font-weight: 600; color: #166534;">
+              सादर जय जिनेन्द्र, ${headName} जी 🙏
+            </p>
+            <p style="font-size: 13px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
+              श्री ${sanghName} की समग्र जनगणना एवं जिन संस्कार सेतु डिजिटल डायरेक्टरी के अंतर्गत आपके परिवार के सभी सदस्यों के अधिकृत डिजिटल पहचान पत्र (Family ID Cards) नीचे संलग्न हैं।
+            </p>
+
+            <!-- Family Master Box -->
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+                <tr>
+                  <td>
+                    <span style="color: #166534; font-size: 11px; text-transform: uppercase; font-weight: 700;">Family ID</span>
+                    <div style="font-size: 18px; font-family: monospace; font-weight: 800; color: #0d5c3a;">${familyId}</div>
+                  </td>
+                  <td style="text-align: right;">
+                    <span style="color: #166534; font-size: 11px; text-transform: uppercase; font-weight: 700;">सम्प्रदाय / Sect</span>
+                    <div style="font-size: 13px; font-weight: 700; color: #1e293b;">${sect || 'जैन (Jain)'}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding-top: 8px; font-size: 12px; color: #334155;">
+                    📍 <strong>पता:</strong> ${address}${lane ? ', ' + lane : ''}, ${area}
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- Member Cards Section -->
+            <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0 0 12px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px;">
+              पारिवारिक सदस्य पहचान पत्र (${members.length} सदस्य)
+            </h3>
+            
+            ${memberCardsHtml}
+
+            <!-- Direct Access Button -->
+            <div style="text-align: center; margin: 24px 0 12px 0;">
+              <a href="${directLink}" style="background-color: #0d5c3a; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                👉 डिजिटल परिवार प्रोफाइल व कार्ड खोलें (Open Digital ID)
+              </a>
+            </div>
+
+            <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0; text-align: center;">
+              * इन सदस्य संख्याओं (Member IDs) का उपयोग संघ लवाजम भुगतान, धार्मिक अनुष्ठान एवं संघ सेवाओं के लिए किया जा सकता है।
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 20px; text-align: center; font-size: 12px; color: #94a3b8;">
+            <p style="margin: 0 0 4px 0; font-weight: 600; color: #475569;">श्री ${sanghName} • जिन संस्कार सेतु</p>
+            <p style="margin: 0;">अहिंसा परमो धर्मः • जीओ और जीने दो</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to,
+    subject,
+    html,
+    text: `जय जिनेन्द्र ${headName} जी,\n\nश्री ${sanghName} - आपके परिवार का Family ID: ${familyId}\n\nसदस्य संख्या:\n${members
+      .map((m) => `- ${m.name} (${m.relationship}): ${m.memberId}`)
+      .join('\n')}\n\nडिजिटल कार्ड पोर्टल लिंक: ${directLink}\n\nजिन संस्कार सेतु`,
+  });
+}
