@@ -14,7 +14,11 @@ export default async function AdminUsersPage() {
       orderBy: { createdAt: "asc" },
     }),
     prisma.sangh.findMany({
-      where: { active: true },
+      include: {
+        _count: {
+          select: { families: true, members: true, users: true },
+        },
+      },
       orderBy: { name: "asc" },
     }),
   ]);

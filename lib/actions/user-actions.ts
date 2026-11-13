@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireAdmin, requireAuth } from "@/lib/auth/auth-helpers";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { Role, UserStatus } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
@@ -591,5 +592,170 @@ export async function getPendingTrusteesAction() {
     };
   } catch (err: any) {
     return { success: false, error: err?.message || "Failed to fetch pending trustees." };
+  }
+}
+
+// --------------------------------------------------------------------------
+// DELETE USER / VOLUNTEER (ADMIN ONLY)
+// --------------------------------------------------------------------------
+export async function deleteUserAction(userId: string): Promise<{ success: boolean; error?: string }> {
+  const admin = await requireAdmin();
+
+  if (userId === admin.id) {
+    return { success: false, error: "Cannot delete your own administrator account while logged in." };
+  }
+
+  try {
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!targetUser) {
+      return { success: false, error: "User not found." };
+    }
+
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+
+    await logAuditEvent({
+      action: "USER_DELETED",
+      entityType: "User",
+      entityId: userId,
+      performedBy: admin.username,
+      metadata: {
+        deletedUsername: targetUser.username,
+        role: targetUser.role,
+      },
+    });
+
+    revalidatePath("/admin/users");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to delete user." };
+  }
+}
+
+// --------------------------------------------------------------------------
+// SANGH MANAGEMENT (DELETE & CREATE) (ADMIN ONLY)
+// --------------------------------------------------------------------------
+export async function deleteSanghAction(sanghId: string): Promise<{ success: boolean; error?: string }> {
+  const admin = await requireAdmin();
+
+  try {
+    const sangh = await prisma.sangh.findUnique({
+      where: { id: sanghId },
+      include: {
+        _count: {
+          select: {
+            families: true,
+            members: true,
+            users: true,
+          },
+        },
+      },
+    });
+
+    if (!sangh) {
+      return { success: false, error: "Sangh not found." };
+    }
+
+    if (sangh._count.families > 0 || sangh._count.members > 0) {
+      return {
+        success: false,
+        error: `Cannot delete Sangh "${sangh.name}": There are ${sangh._count.families} families and ${sangh._count.members} members registered under it. Please delete or reassign those families first, or mark the Sangh as inactive.`,
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Unlink any users assigned to this Sangh
+      await tx.user.updateMany({
+        where: { sanghId },
+        data: { sanghId: null },
+      });
+
+      // Delete the Sangh
+      await tx.sangh.delete({
+        where: { id: sanghId },
+      });
+
+      await logAuditEvent(
+        {
+          action: "SANGH_DELETED",
+          entityType: "System",
+          entityId: sanghId,
+          performedBy: admin.username,
+          metadata: { name: sangh.name, prefix: sangh.prefix },
+        },
+        tx
+      );
+    });
+
+    revalidatePath("/admin/users");
+    revalidatePath("/dashboard");
+    revalidatePath("/families");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to delete Sangh." };
+  }
+}
+
+export async function createSanghAction({
+  name,
+  prefix,
+  annualLavaajamAmount,
+}: {
+  name: string;
+  prefix: string;
+  annualLavaajamAmount?: number;
+}): Promise<{ success: boolean; error?: string; sangh?: any }> {
+  const admin = await requireAdmin();
+
+  const cleanName = name.trim();
+  const cleanPrefix = prefix.trim().toUpperCase();
+
+  if (!cleanName || cleanName.length < 2) {
+    return { success: false, error: "Please enter a valid Sangh name." };
+  }
+  if (!cleanPrefix || cleanPrefix.length < 2) {
+    return { success: false, error: "Please enter a valid prefix (at least 2 letters)." };
+  }
+
+  try {
+    const existing = await prisma.sangh.findFirst({
+      where: {
+        OR: [
+          { name: { equals: cleanName, mode: "insensitive" } },
+          { prefix: cleanPrefix },
+        ],
+      },
+    });
+
+    if (existing) {
+      return { success: false, error: "A Sangh with this name or prefix already exists." };
+    }
+
+    const sangh = await prisma.sangh.create({
+      data: {
+        name: cleanName,
+        prefix: cleanPrefix,
+        annualLavaajamAmount: annualLavaajamAmount || 1100,
+        active: true,
+      },
+    });
+
+    await logAuditEvent({
+      action: "SANGH_CREATED",
+      entityType: "System",
+      entityId: sangh.id,
+      performedBy: admin.username,
+      metadata: { name: sangh.name, prefix: sangh.prefix },
+    });
+
+    revalidatePath("/admin/users");
+    revalidatePath("/dashboard");
+    return { success: true, sangh };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to create Sangh." };
   }
 }

@@ -10,6 +10,7 @@ interface FamiliesPageProps {
     page?: string;
     q?: string;
     sanghId?: string;
+    status?: string;
   };
 }
 
@@ -20,6 +21,7 @@ export default async function FamiliesPage({ searchParams }: FamiliesPageProps) 
   const pageSize = 15;
   const q = searchParams.q?.trim() || "";
   const requestedSanghId = searchParams.sanghId || undefined;
+  const selectedStatus = searchParams.status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE";
 
   const sanghFilter = getSanghAccessFilter(user, requestedSanghId);
 
@@ -36,23 +38,25 @@ export default async function FamiliesPage({ searchParams }: FamiliesPageProps) 
     : {};
 
   const whereClause = {
-    status: "ACTIVE" as const,
+    status: selectedStatus as "ACTIVE" | "ARCHIVED",
     ...sanghFilter,
     ...searchFilter,
   };
 
-  const [families, totalCount, sanghs] = await Promise.all([
+  const [families, totalCount, activeCount, archivedCount, sanghs] = await Promise.all([
     prisma.family.findMany({
       where: whereClause,
       include: {
         sangh: true,
-        members: { where: { status: "ACTIVE" } },
+        members: true,
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
     prisma.family.count({ where: whereClause }),
+    prisma.family.count({ where: { status: "ACTIVE", ...sanghFilter, ...searchFilter } }),
+    prisma.family.count({ where: { status: "ARCHIVED", ...sanghFilter, ...searchFilter } }),
     prisma.sangh.findMany({
       where: user.role === "TRUSTEE" && user.sanghId ? { id: user.sanghId, active: true } : { active: true },
       orderBy: { name: "asc" },
@@ -78,6 +82,39 @@ export default async function FamiliesPage({ searchParams }: FamiliesPageProps) 
           </Link>
         )}
       </div>
+
+      {/* Status Filter Tabs (Active vs Archived) */}
+      <div className="d-flex align-items-center gap-2 mb-3">
+        <Link
+          href={`/families?status=ACTIVE${q ? `&q=${encodeURIComponent(q)}` : ""}${requestedSanghId ? `&sanghId=${requestedSanghId}` : ""}`}
+          className={`btn btn-sm px-3 fw-bold rounded-pill shadow-xs ${
+            selectedStatus === "ACTIVE"
+              ? "btn-success"
+              : "btn-outline-secondary"
+          }`}
+        >
+          <i className="bi bi-people-fill me-1"></i> Active Families ({activeCount})
+        </Link>
+        <Link
+          href={`/families?status=ARCHIVED${q ? `&q=${encodeURIComponent(q)}` : ""}${requestedSanghId ? `&sanghId=${requestedSanghId}` : ""}`}
+          className={`btn btn-sm px-3 fw-bold rounded-pill shadow-xs ${
+            selectedStatus === "ARCHIVED"
+              ? "btn-danger"
+              : "btn-outline-secondary"
+          }`}
+        >
+          <i className="bi bi-archive-fill me-1"></i> Archived / Deleted ({archivedCount})
+        </Link>
+      </div>
+
+      {selectedStatus === "ARCHIVED" && (
+        <div className="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+          <i className="bi bi-exclamation-triangle-fill fs-5 text-warning-emphasis"></i>
+          <div>
+            <strong>Archived Records (संग्रहीत परिवार):</strong> These families have been removed from active census. Administrators can open any record to <strong>Restore</strong> it or <strong>Permanently Delete from Database</strong> to free up the Family ID for reuse.
+          </div>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="card-clean p-3 mb-4 bg-white">

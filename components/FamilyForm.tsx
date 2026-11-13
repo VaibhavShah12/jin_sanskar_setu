@@ -1492,9 +1492,18 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                         </div>
                       )}
 
-                      {/* If Son is Married: Ask Wife's Name & Contact Number */}
+                      {/* If Son is Married: Ask Wife's Name, DOB/Age, Blood Group & Contact Number */}
                       {isSon && isMarried && (
                         <>
+                          <div className="col-12 mt-2">
+                            <div className="alert alert-success-subtle border border-success py-1 px-3 small d-flex align-items-center gap-2 mb-0">
+                              <i className="bi bi-person-check-fill text-success fs-5"></i>
+                              <span>
+                                <strong>Auto-Sangh Member:</strong> Son&apos;s wife will automatically be registered as an official Sangh member (Daughter-in-law / पुत्रवधू) with her own Member ID and Digital Card.
+                              </span>
+                            </div>
+                          </div>
+
                           <div className="col-12 col-sm-6 col-md-3">
                             <label className="form-label small fw-semibold text-dark mb-1">
                               <i className="bi bi-heart text-danger me-1"></i>
@@ -1508,16 +1517,69 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                               onChange={(e) => updateMember(idx, "wifeName", e.target.value)}
                               required
                             />
-                            <div className="form-text small text-muted">
-                              Can also be registered as a member (Daughter-in-law).
-                            </div>
                           </div>
 
-                          <div className="col-12 col-sm-6 col-md-3">
+                          <div className="col-6 col-sm-3 col-md-2">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              Wife&apos;s DOB
+                            </label>
+                            <input
+                              type="date"
+                              max={todayStr}
+                              className="form-control form-control-sm"
+                              value={member.wifeDateOfBirth || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                updateMember(idx, "wifeDateOfBirth", val);
+                                if (val) {
+                                  const age = calculateAgeFromDob(val);
+                                  if (age !== null) updateMember(idx, "wifeAge", age);
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div className="col-6 col-sm-3 col-md-1">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              Age
+                            </label>
+                            <input
+                              type="number"
+                              min="18"
+                              max="120"
+                              className="form-control form-control-sm"
+                              value={member.wifeAge || (member.age ? Math.max(18, member.age - 2) : 28)}
+                              onChange={(e) => updateMember(idx, "wifeAge", parseInt(e.target.value) || 28)}
+                            />
+                          </div>
+
+                          <div className="col-6 col-sm-6 col-md-3">
+                            <label className="form-label small fw-semibold text-dark mb-1">
+                              <i className="bi bi-droplet-half text-danger me-1"></i>
+                              Wife&apos;s Blood Group (रक्त समूह)
+                            </label>
+                            <select
+                              className="form-select form-select-sm"
+                              value={member.wifeBloodGroup || ""}
+                              onChange={(e) => updateMember(idx, "wifeBloodGroup", e.target.value)}
+                            >
+                              <option value="">Select (ऐच्छिक)</option>
+                              <option value="A+">A+</option>
+                              <option value="A-">A-</option>
+                              <option value="B+">B+</option>
+                              <option value="B-">B-</option>
+                              <option value="AB+">AB+</option>
+                              <option value="AB-">AB-</option>
+                              <option value="O+">O+</option>
+                              <option value="O-">O-</option>
+                              <option value="UNKNOWN">Unknown</option>
+                            </select>
+                          </div>
+
+                          <div className="col-6 col-sm-6 col-md-3">
                             <label className="form-label small fw-semibold text-dark mb-1">
                               <i className="bi bi-telephone text-primary me-1"></i>
                               Wife&apos;s Contact Number
-                              <span className="text-muted fw-normal ms-1">(Optional)</span>
                             </label>
                             <input
                               type="tel"
@@ -1598,6 +1660,84 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                             />
                             <div className="form-text small text-primary">Required for married daughter/sister.</div>
                           </div>
+
+                          <div className="col-12 col-md-6 mt-1">
+                            <div className="form-check form-switch pt-2">
+                              <input
+                                className="form-check-input"
+                                type="checkbox"
+                                id={`husband-resident-${idx}`}
+                                checked={Boolean(member.husbandIsResident)}
+                                onChange={(e) => updateMember(idx, "husbandIsResident", e.target.checked)}
+                              />
+                              <label className="form-check-label small fw-bold text-dark" htmlFor={`husband-resident-${idx}`}>
+                                Does husband reside in this household / Sangh (क्या दामाद इसी घर/संघ में रहते हैं)?
+                              </label>
+                            </div>
+                            <small className="text-muted d-block">
+                              Check only if husband is a resident member of this household/Sangh. If checked, he will be registered as a member with his own Member ID.
+                            </small>
+                          </div>
+
+                          {member.husbandIsResident && (
+                            <>
+                              <div className="col-6 col-sm-4 col-md-3">
+                                <label className="form-label small fw-semibold text-dark mb-1">Husband&apos;s DOB</label>
+                                <input
+                                  type="date"
+                                  max={todayStr}
+                                  className="form-control form-control-sm"
+                                  value={member.husbandDateOfBirth || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateMember(idx, "husbandDateOfBirth", val);
+                                    if (val) {
+                                      const age = calculateAgeFromDob(val);
+                                      if (age !== null) updateMember(idx, "husbandAge", age);
+                                    }
+                                  }}
+                                />
+                              </div>
+
+                              <div className="col-6 col-sm-4 col-md-3">
+                                <label className="form-label small fw-semibold text-dark mb-1">
+                                  <i className="bi bi-droplet-half text-danger me-1"></i>
+                                  Husband&apos;s Blood Group
+                                </label>
+                                <select
+                                  className="form-select form-select-sm"
+                                  value={member.husbandBloodGroup || ""}
+                                  onChange={(e) => updateMember(idx, "husbandBloodGroup", e.target.value)}
+                                >
+                                  <option value="">Select (ऐच्छिक)</option>
+                                  <option value="A+">A+</option>
+                                  <option value="A-">A-</option>
+                                  <option value="B+">B+</option>
+                                  <option value="B-">B-</option>
+                                  <option value="AB+">AB+</option>
+                                  <option value="AB-">AB-</option>
+                                  <option value="O+">O+</option>
+                                  <option value="O-">O-</option>
+                                  <option value="UNKNOWN">Unknown</option>
+                                </select>
+                              </div>
+
+                              <div className="col-12 col-sm-4 col-md-3">
+                                <label className="form-label small fw-semibold text-dark mb-1">
+                                  Husband&apos;s Contact
+                                </label>
+                                <input
+                                  type="tel"
+                                  inputMode="numeric"
+                                  maxLength={15}
+                                  className="form-control form-control-sm"
+                                  placeholder="Husband's phone (optional)"
+                                  value={member.husbandContact || ""}
+                                  onChange={(e) => updateMember(idx, "husbandContact", e.target.value)}
+                                />
+                              </div>
+                            </>
+                          )}
                         </>
                       ) : (
                         /* Individual Phone / WhatsApp Number for other members (Not Compulsory) */
@@ -1865,6 +2005,22 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
                                       <option value="O-">O-</option>
                                       <option value="UNKNOWN">Unknown</option>
                                     </select>
+                                  </div>
+                                  <div className="col-12 col-sm-4 col-md-2">
+                                    <label className="form-label small fw-semibold text-dark mb-1">
+                                      <i className="bi bi-telephone text-primary me-1"></i>
+                                      Phone
+                                      <span className="text-muted fw-normal ms-1">(Optional)</span>
+                                    </label>
+                                    <input
+                                      type="tel"
+                                      inputMode="numeric"
+                                      maxLength={15}
+                                      className="form-control form-control-sm"
+                                      placeholder="Child phone (optional)"
+                                      value={child.whatsappNumber || ""}
+                                      onChange={(e) => updateMemberChild(idx, cIdx, "whatsappNumber", e.target.value)}
+                                    />
                                   </div>
                                 </div>
                               </div>

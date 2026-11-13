@@ -9,6 +9,9 @@ import {
   adminResetUserPasswordAction,
   approveTrusteeAction,
   rejectTrusteeAction,
+  deleteUserAction,
+  deleteSanghAction,
+  createSanghAction,
 } from "@/lib/actions/user-actions";
 import { Role, UserStatus } from "@prisma/client";
 
@@ -58,6 +61,18 @@ export default function AdminUserManagementClient({
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
 
+  // User Deletion State
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  // Sangh Management State
+  const [sanghList, setSanghList] = useState<any[]>(sanghs);
+  const [deletingSanghId, setDeletingSanghId] = useState<string | null>(null);
+  const [showAddSanghModal, setShowAddSanghModal] = useState(false);
+  const [newSanghName, setNewSanghName] = useState("");
+  const [newSanghPrefix, setNewSanghPrefix] = useState("");
+  const [newSanghFee, setNewSanghFee] = useState<number | string>(1500);
+  const [creatingSangh, setCreatingSangh] = useState(false);
+
   const pendingTrustees = users.filter((u) => u.status === "PENDING");
 
   const handleApproveTrustee = async (user: any, canExport: boolean = false) => {
@@ -87,6 +102,97 @@ export default function AdminUserManagementClient({
     }
     setUsers(users.filter((u) => u.id !== user.id));
     setSuccessMsg(`Trustee registration request for "${user.username}" has been rejected.`);
+  };
+
+  // ---- PERMANENTLY DELETE USER (ADMIN ONLY) ----
+  const handleDeleteUser = async (user: any) => {
+    if (user.id === adminId) {
+      alert("You cannot delete your own logged-in administrator account.");
+      return;
+    }
+    const ok = window.confirm(
+      `Are you sure you want to PERMANENTLY DELETE user "${user.username}" (${user.name || "No Name"})?\n\nThis will permanently delete their account and permissions from PostgreSQL.`
+    );
+    if (!ok) return;
+
+    clearMessages();
+    setDeletingUserId(user.id);
+    try {
+      const res = await deleteUserAction(user.id);
+      if (res.success) {
+        setUsers(users.filter((u) => u.id !== user.id));
+        setSuccessMsg(`User "${user.username}" has been permanently deleted from the database.`);
+      } else {
+        setErrorMsg(res.error || "Failed to delete user.");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to delete user.");
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
+  // ---- PERMANENTLY DELETE SANGH (ADMIN ONLY) ----
+  const handleDeleteSangh = async (sangh: any) => {
+    const familyCount = sangh._count?.families ?? 0;
+    const memberCount = sangh._count?.members ?? 0;
+    if (familyCount > 0 || memberCount > 0) {
+      alert(
+        `Cannot delete Sangh "${sangh.name}" because it still has ${familyCount} families and ${memberCount} members associated with it. Please reassign or delete the associated families first.`
+      );
+      return;
+    }
+
+    const ok = window.confirm(
+      `Are you sure you want to PERMANENTLY DELETE Sangh "${sangh.name}" (${sangh.prefix})?\n\nThis will remove the Sangh from the database.`
+    );
+    if (!ok) return;
+
+    clearMessages();
+    setDeletingSanghId(sangh.id);
+    try {
+      const res = await deleteSanghAction(sangh.id);
+      if (res.success) {
+        setSanghList(sanghList.filter((s) => s.id !== sangh.id));
+        setSuccessMsg(`Sangh "${sangh.name}" has been successfully deleted.`);
+      } else {
+        setErrorMsg(res.error || "Failed to delete Sangh.");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to delete Sangh.");
+    } finally {
+      setDeletingSanghId(null);
+    }
+  };
+
+  // ---- CREATE NEW SANGH (ADMIN ONLY) ----
+  const handleCreateSangh = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearMessages();
+    setCreatingSangh(true);
+
+    try {
+      const res = await createSanghAction({
+        name: newSanghName,
+        prefix: newSanghPrefix,
+        annualLavaajamAmount: Number(newSanghFee) || 0,
+      });
+
+      if (res.success && res.sangh) {
+        setSanghList([...sanghList, { ...res.sangh, _count: { families: 0, members: 0, users: 0 } }]);
+        setSuccessMsg(`Sangh "${res.sangh.name}" (${res.sangh.prefix}) created successfully!`);
+        setShowAddSanghModal(false);
+        setNewSanghName("");
+        setNewSanghPrefix("");
+        setNewSanghFee(1500);
+      } else {
+        setErrorMsg(res.error || "Failed to create Sangh.");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to create Sangh.");
+    } finally {
+      setCreatingSangh(false);
+    }
   };
 
   const resetAddForm = () => {
@@ -564,10 +670,10 @@ export default function AdminUserManagementClient({
                             {!isSelf && (
                               <button
                                 onClick={() => handleToggleStatus(u)}
-                                disabled={loading}
+                                disabled={loading || deletingUserId === u.id}
                                 className={`btn btn-sm ${
                                   u.status === "ACTIVE"
-                                    ? "btn-outline-danger"
+                                    ? "btn-outline-warning"
                                     : "btn-outline-success"
                                 }`}
                                 title={u.status === "ACTIVE" ? "Disable user" : "Enable user"}
@@ -576,6 +682,21 @@ export default function AdminUserManagementClient({
                                   <i className="bi bi-slash-circle"></i>
                                 ) : (
                                   <i className="bi bi-check-circle"></i>
+                                )}
+                              </button>
+                            )}
+                            {/* Delete User from DB */}
+                            {!isSelf && (
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                disabled={loading || deletingUserId === u.id}
+                                className="btn btn-sm btn-outline-danger"
+                                title="Permanently delete user from database"
+                              >
+                                {deletingUserId === u.id ? (
+                                  <span className="spinner-border spinner-border-sm" role="status"></span>
+                                ) : (
+                                  <i className="bi bi-trash"></i>
                                 )}
                               </button>
                             )}
@@ -593,6 +714,194 @@ export default function AdminUserManagementClient({
           </table>
         </div>
       </div>
+
+      {/* ===================== SANGH MANAGEMENT ===================== */}
+      <div className="card-clean p-0 overflow-hidden shadow-sm mt-4">
+        <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center p-3 p-md-4 border-bottom gap-2">
+          <div>
+            <h4 className="fw-bold text-dark mb-1">Registered Sanghs</h4>
+            <p className="text-muted small mb-0">
+              Manage local Jain Sanghs, family ID prefixes, and annual Lavaajam fees.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowAddSanghModal(true)}
+            className="btn btn-outline-primary d-flex align-items-center gap-2 px-3 align-self-start align-self-sm-auto shadow-sm"
+          >
+            <i className="bi bi-building-add"></i>
+            <span>Add New Sangh</span>
+          </button>
+        </div>
+
+        <div className="table-responsive">
+          <table className="table table-hover align-middle mb-0">
+            <thead className="table-light">
+              <tr>
+                <th className="ps-3">Sangh Name</th>
+                <th>Prefix</th>
+                <th>Annual Lavaajam Fee</th>
+                <th>Registered Families</th>
+                <th>Members</th>
+                <th>Active Users</th>
+                <th className="text-end pe-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sanghList.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center text-muted py-4">
+                    No Sanghs found.
+                  </td>
+                </tr>
+              )}
+              {sanghList.map((s) => {
+                const familyCount = s._count?.families ?? 0;
+                const memberCount = s._count?.members ?? 0;
+                const userCount = s._count?.users ?? 0;
+                const canDelete = familyCount === 0 && memberCount === 0;
+
+                return (
+                  <tr key={s.id}>
+                    <td className="ps-3">
+                      <div className="d-flex align-items-center gap-2">
+                        <div className="rounded-circle bg-light border p-2 text-primary fw-bold fs-6">
+                          <i className="bi bi-building"></i>
+                        </div>
+                        <div>
+                          <strong className="d-block text-dark">{s.name}</strong>
+                          <span className="small text-muted font-monospace">{s.id.slice(0, 10)}...</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge-sangh font-monospace fs-6 px-2 py-1">
+                        {s.prefix}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="fw-semibold text-dark">
+                        ₹{s.annualLavaajamAmount?.toLocaleString("en-IN") || 0}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge bg-light text-dark border">
+                        {familyCount} Families
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge bg-light text-dark border">
+                        {memberCount} Members
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge bg-light text-dark border">
+                        {userCount} Users
+                      </span>
+                    </td>
+                    <td className="text-end pe-3">
+                      <button
+                        onClick={() => handleDeleteSangh(s)}
+                        disabled={deletingSanghId === s.id}
+                        className={`btn btn-sm ${canDelete ? "btn-outline-danger" : "btn-light text-muted border"}`}
+                        title={
+                          canDelete
+                            ? "Delete Sangh from database"
+                            : `Cannot delete: Sangh has ${familyCount} families and ${memberCount} members.`
+                        }
+                      >
+                        {deletingSanghId === s.id ? (
+                          <span className="spinner-border spinner-border-sm" role="status"></span>
+                        ) : (
+                          <i className="bi bi-trash"></i>
+                        )}
+                        <span className="ms-1 d-none d-md-inline">Delete Sangh</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ===================== ADD SANGH MODAL ===================== */}
+      {showAddSanghModal && (
+        <div className="modal fade show d-block" tabIndex={-1} role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1055 }}>
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content shadow-lg border-0 rounded-4">
+              <div className="modal-header border-0 pb-0">
+                <h5 className="modal-title fw-bold text-dark">
+                  <i className="bi bi-building-add me-2 text-primary"></i>
+                  Add New Sangh
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowAddSanghModal(false)}
+                  disabled={creatingSangh}
+                ></button>
+              </div>
+              <form onSubmit={handleCreateSangh}>
+                <div className="modal-body py-3">
+                  <div className="mb-3">
+                    <label className="form-label small fw-semibold text-muted">Sangh Name *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Shree Vardhaman Jain Sangh"
+                      value={newSanghName}
+                      onChange={(e) => setNewSanghName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label small fw-semibold text-muted">ID Prefix (2-5 Capital Letters) *</label>
+                    <input
+                      type="text"
+                      className="form-control font-monospace"
+                      placeholder="e.g. SVJS"
+                      maxLength={6}
+                      value={newSanghPrefix}
+                      onChange={(e) => setNewSanghPrefix(e.target.value.toUpperCase())}
+                      required
+                    />
+                    <small className="text-muted">Used to generate unique Family IDs (e.g. SVJS-001).</small>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label small fw-semibold text-muted">Annual Lavaajam Fee (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      placeholder="1500"
+                      min={0}
+                      value={newSanghFee}
+                      onChange={(e) => setNewSanghFee(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer border-0 pt-0">
+                  <button
+                    type="button"
+                    className="btn btn-light"
+                    onClick={() => setShowAddSanghModal(false)}
+                    disabled={creatingSangh}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-jain-primary px-4 fw-semibold"
+                    disabled={creatingSangh}
+                  >
+                    {creatingSangh ? "Creating..." : "Create Sangh"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===================== ADD USER MODAL ===================== */}
       {modalMode === "add" && (

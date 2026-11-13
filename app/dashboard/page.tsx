@@ -32,6 +32,9 @@ export default async function DashboardPage() {
   const [
     totalFamilies,
     totalMembers,
+    membersInPune,
+    membersOutOfPune,
+    membersForeign,
     totalChildren,
     childrenAttending,
     childrenNotAttending,
@@ -49,6 +52,19 @@ export default async function DashboardPage() {
     }),
     prisma.member.count({
       where: { status: "ACTIVE", ...sanghFilter },
+    }),
+    prisma.member.count({
+      where: {
+        status: "ACTIVE",
+        OR: [{ residenceLocation: "IN_PUNE" }, { residenceLocation: null }],
+        ...sanghFilter,
+      },
+    }),
+    prisma.member.count({
+      where: { status: "ACTIVE", residenceLocation: "OUT_OF_PUNE", ...sanghFilter },
+    }),
+    prisma.member.count({
+      where: { status: "ACTIVE", residenceLocation: "FOREIGN", ...sanghFilter },
     }),
     prisma.member.count({
       where: { status: "ACTIVE", age: { lt: 18 }, ...sanghFilter },
@@ -268,17 +284,26 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Total Members */}
+        {/* Members in Pune (Primary Active Count) */}
         <div className="col-6 col-lg-3">
-          <div className="card-clean p-3 h-100">
+          <div className="card-clean p-3 h-100 border-start border-4 border-success">
             <div className="d-flex justify-content-between align-items-start mb-2">
-              <span className="text-muted small fw-semibold text-uppercase">Members</span>
-              <span className="badge bg-info-subtle text-info-emphasis p-2 rounded-3">
-                <i className="bi bi-people-fill"></i>
+              <span className="text-success-emphasis small fw-bold text-uppercase">Members in Pune</span>
+              <span className="badge bg-success-subtle text-success p-2 rounded-3" title="Staying in Pune">
+                <i className="bi bi-geo-alt-fill"></i>
               </span>
             </div>
-            <div className="display-6 fw-bold text-dark mb-1">{totalMembers}</div>
-            <div className="text-muted small">Total surveyed individuals</div>
+            <div className="display-6 fw-bold text-success mb-1">{membersInPune}</div>
+            <div className="small text-muted mb-1">पुणे में वर्तमान सदस्य</div>
+            <div className="d-flex flex-wrap gap-1" style={{ fontSize: "0.68rem" }}>
+              <span className="badge bg-light text-secondary border">Total: {totalMembers}</span>
+              {membersOutOfPune > 0 && (
+                <span className="badge bg-light text-warning-emphasis border">Out: {membersOutOfPune}</span>
+              )}
+              {membersForeign > 0 && (
+                <span className="badge bg-light text-danger-emphasis border">✈️ Foreign: {membersForeign}</span>
+              )}
+            </div>
           </div>
         </div>
 

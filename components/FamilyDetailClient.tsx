@@ -8,6 +8,9 @@ import ConfirmModal from "@/components/ConfirmModal";
 import {
   archiveFamilyAction,
   archiveMemberAction,
+  restoreFamilyAction,
+  deleteFamilyPermanentlyAction,
+  deleteMemberPermanentlyAction,
   sendFamilyIdCardsEmailAction,
   updateFamilyAndMembersAction,
 } from "@/lib/actions/family-actions";
@@ -248,6 +251,68 @@ export default function FamilyDetailClient({
   // Direct Family Email State
   const [showDirectEmailModal, setShowDirectEmailModal] = useState(false);
   const [showPrintCardsModal, setShowPrintCardsModal] = useState(false);
+
+  // Permanent Hard Delete & Restore State
+  const [showHardDeleteModal, setShowHardDeleteModal] = useState(false);
+  const [deletingFamily, setDeletingFamily] = useState(false);
+  const [restoringFamily, setRestoringFamily] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<any>(null);
+  const [deletingMember, setDeletingMember] = useState(false);
+
+  const handleDeleteFamilyPermanently = async () => {
+    setDeletingFamily(true);
+    try {
+      const res = await deleteFamilyPermanentlyAction(family.id);
+      if (res.success) {
+        alert(`Family ${family.familyId} (${family.headName}) and all records have been PERMANENTLY deleted from the database. Family ID ${family.familyId} is now freed up for reuse.`);
+        router.push("/families");
+      } else {
+        alert(res.error || "Failed to permanently delete family.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete family.");
+    } finally {
+      setDeletingFamily(false);
+      setShowHardDeleteModal(false);
+    }
+  };
+
+  const handleRestoreFamily = async () => {
+    const ok = window.confirm(`Restore family ${family.familyId} (${family.headName}) back to ACTIVE status?`);
+    if (!ok) return;
+
+    setRestoringFamily(true);
+    try {
+      const res = await restoreFamilyAction(family.id);
+      if (res.success) {
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to restore family.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to restore family.");
+    } finally {
+      setRestoringFamily(false);
+    }
+  };
+
+  const handleDeleteMemberPermanently = async () => {
+    if (!memberToDelete) return;
+    setDeletingMember(true);
+    try {
+      const res = await deleteMemberPermanentlyAction(memberToDelete.id);
+      if (res.success) {
+        setMemberToDelete(null);
+        router.refresh();
+      } else {
+        alert(res.error || "Failed to delete member.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete member.");
+    } finally {
+      setDeletingMember(false);
+    }
+  };
   const [directSubject, setDirectSubject] = useState(`श्री ${family.sangh?.name || "संघ"} - परिवार संपर्क (${family.familyId})`);
   const [directMessage, setDirectMessage] = useState("");
   const [directSending, setDirectSending] = useState(false);
@@ -424,12 +489,32 @@ export default function FamilyDetailClient({
               </button>
             )}
 
+            {isAdmin && family.status === "ARCHIVED" && (
+              <button
+                onClick={handleRestoreFamily}
+                disabled={restoringFamily}
+                className="btn btn-outline-success btn-sm px-3 shadow-sm"
+              >
+                <i className="bi bi-arrow-counterclockwise me-1"></i> {restoringFamily ? "Restoring..." : "Restore Family"}
+              </button>
+            )}
+
             {isAdmin && family.status === "ACTIVE" && (
               <button
                 onClick={() => setShowArchiveModal(true)}
-                className="btn btn-outline-danger btn-sm px-3 shadow-sm"
+                className="btn btn-outline-warning btn-sm px-3 shadow-sm"
               >
                 <i className="bi bi-archive me-1"></i> Archive Family
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                onClick={() => setShowHardDeleteModal(true)}
+                className="btn btn-danger btn-sm px-3 shadow-sm"
+                title="Permanently remove family and all records from database, freeing up Family ID for reuse"
+              >
+                <i className="bi bi-trash3-fill me-1"></i> Delete from DB
               </button>
             )}
           </div>
@@ -694,10 +779,20 @@ export default function FamilyDetailClient({
                         {isAdmin && m.status === "ACTIVE" && (
                           <button
                             onClick={() => setMemberToArchive(m)}
-                            className="btn btn-outline-danger btn-sm"
+                            className="btn btn-outline-warning btn-sm"
                             title="Archive Member (Admin Only)"
                           >
                             <i className="bi bi-person-x"></i>
+                          </button>
+                        )}
+                        {/* Member Hard Delete: ONLY ADMIN */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => setMemberToDelete(m)}
+                            className="btn btn-outline-danger btn-sm"
+                            title="Permanently Delete Member from Database (Admin Only)"
+                          >
+                            <i className="bi bi-trash3"></i>
                           </button>
                         )}
                       </div>
@@ -821,10 +916,20 @@ export default function FamilyDetailClient({
                 {isAdmin && m.status === "ACTIVE" && (
                   <button
                     onClick={() => setMemberToArchive(m)}
-                    className="btn btn-sm btn-outline-danger px-2"
+                    className="btn btn-sm btn-outline-warning px-2"
                     title="Archive Member (Admin Only)"
                   >
                     <i className="bi bi-person-x me-1"></i> Archive
+                  </button>
+                )}
+                {/* Member Hard Delete: ONLY ADMIN */}
+                {isAdmin && (
+                  <button
+                    onClick={() => setMemberToDelete(m)}
+                    className="btn btn-sm btn-outline-danger px-2"
+                    title="Permanently Delete Member from Database (Admin Only)"
+                  >
+                    <i className="bi bi-trash3 me-1"></i> Delete DB
                   </button>
                 )}
               </div>
@@ -891,6 +996,30 @@ export default function FamilyDetailClient({
         isLoading={archivingMember}
         onConfirm={handleArchiveMember}
         onCancel={() => setMemberToArchive(null)}
+      />
+
+      {/* Confirmation Modal for Permanent Hard Deletion of Family (ADMIN ONLY) */}
+      <ConfirmModal
+        isOpen={showHardDeleteModal}
+        title="Permanently Delete Family from Database?"
+        message={`WARNING: You are about to PERMANENTLY DELETE family ${family.familyId} (${family.headName}) and all associated members from PostgreSQL. This will permanently remove all related logs, submissions, payments, and registrations. The Family ID ${family.familyId} will be released and can be reused. This action CANNOT be undone.`}
+        confirmText="Yes, Permanently Delete from DB"
+        confirmVariant="danger"
+        isLoading={deletingFamily}
+        onConfirm={handleDeleteFamilyPermanently}
+        onCancel={() => setShowHardDeleteModal(false)}
+      />
+
+      {/* Confirmation Modal for Permanent Hard Deletion of Member (ADMIN ONLY) */}
+      <ConfirmModal
+        isOpen={!!memberToDelete}
+        title="Permanently Delete Member from Database?"
+        message={`WARNING: You are about to PERMANENTLY DELETE member ${memberToDelete?.memberId} (${memberToDelete?.name}) from PostgreSQL. This action CANNOT be undone.`}
+        confirmText="Yes, Permanently Delete Member"
+        confirmVariant="danger"
+        isLoading={deletingMember}
+        onConfirm={handleDeleteMemberPermanently}
+        onCancel={() => setMemberToDelete(null)}
       />
 
       {/* Direct Family Email Modal */}

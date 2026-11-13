@@ -57,12 +57,62 @@ export async function createFamilyAction(
   const rawMobile = data.headWhatsappNumber || data.mobile || "";
   const normalizedMobile = rawMobile ? normalizeMobile(rawMobile) : "";
 
-  // Flatten any nested children (under married son or daughter) into full members
-  // Automatically maps relationship with the Head of Family as GRANDCHILD (पोता / पोती / नाती / नातिन)
+  // Flatten any nested wives, resident husbands, and children into full members
+  // Automatically maps wives as DAUGHTER_IN_LAW, resident husbands as OTHER, and children as GRANDCHILD
   const flattenedMembers: typeof data.members = [];
   for (const m of data.members) {
     const { children, ...parent } = m;
     flattenedMembers.push(parent);
+
+    // If son is married and wifeName provided -> auto-create her as an official Sangh Member (DAUGHTER_IN_LAW)
+    if (m.relationship === "SON" && m.maritalStatus === "MARRIED" && m.wifeName && m.wifeName.trim()) {
+      flattenedMembers.push({
+        name: m.wifeName.trim(),
+        dateOfBirth: m.wifeDateOfBirth || null,
+        age: m.wifeAge || (m.age ? Math.max(18, m.age - 2) : 28),
+        gender: "FEMALE",
+        relationship: "DAUGHTER_IN_LAW",
+        maritalStatus: "MARRIED",
+        bloodGroup: m.wifeBloodGroup || null,
+        whatsappNumber: m.wifeContact || null,
+        residenceLocation: m.residenceLocation || "IN_PUNE",
+        occupation: "HOUSEWIFE",
+        pathshalaStatus: "UNKNOWN",
+        preferredDay: "NO_PREFERENCE",
+        preferredTime: "NO_PREFERENCE",
+        preferredWeekdays: null,
+        transportPreference: null,
+      });
+    }
+
+    // If daughter or sister is married and husband resides in this household/Sangh -> auto-create him as an official Member
+    if (
+      (m.relationship === "DAUGHTER" || m.relationship === "SISTER") &&
+      m.maritalStatus === "MARRIED" &&
+      m.husbandIsResident &&
+      m.husbandName &&
+      m.husbandName.trim()
+    ) {
+      flattenedMembers.push({
+        name: m.husbandName.trim(),
+        dateOfBirth: m.husbandDateOfBirth || null,
+        age: m.husbandAge || (m.age ? m.age + 2 : 30),
+        gender: "MALE",
+        relationship: "OTHER",
+        maritalStatus: "MARRIED",
+        bloodGroup: m.husbandBloodGroup || null,
+        whatsappNumber: m.husbandContact || null,
+        residenceLocation: m.residenceLocation || "IN_PUNE",
+        occupation: "SERVICE",
+        pathshalaStatus: "UNKNOWN",
+        preferredDay: "NO_PREFERENCE",
+        preferredTime: "NO_PREFERENCE",
+        preferredWeekdays: null,
+        transportPreference: null,
+      });
+    }
+
+    // If children provided -> auto-create each child as an official Member (GRANDCHILD) with bloodGroup and phone
     if (children && children.length > 0) {
       for (const c of children) {
         if (c.name && c.name.trim()) {
@@ -74,8 +124,8 @@ export async function createFamilyAction(
             relationship: "GRANDCHILD", // Automatically mapped to Family Head
             maritalStatus: "UNMARRIED",
             bloodGroup: c.bloodGroup || null,
+            whatsappNumber: c.whatsappNumber || null,
             residenceLocation: m.residenceLocation || "IN_PUNE",
-            whatsappNumber: null,
             occupation: (c.age || 0) < 18 ? "STUDENT" : null,
             pathshalaStatus: "UNKNOWN",
             preferredDay: "NO_PREFERENCE",
@@ -430,6 +480,174 @@ export async function archiveMemberAction(memberDbId: string): Promise<{ success
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || "Failed to archive member." };
+  }
+}
+
+/**
+ * Restore an archived family and its members back to ACTIVE status (ADMIN ONLY)
+ */
+export async function restoreFamilyAction(familyDbId: string): Promise<{ success: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") {
+    return { success: false, error: "Access denied. Only administrators are authorized to restore archived families." };
+  }
+
+  try {
+    const family = await prisma.family.findUnique({
+      where: { id: familyDbId },
+    });
+
+    if (!family) {
+      return { success: false, error: "Family not found." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.family.update({
+        where: { id: familyDbId },
+        data: { status: "ACTIVE", updatedBy: user.username },
+      });
+
+      await tx.member.updateMany({
+        where: { familyId: familyDbId },
+        data: { status: "ACTIVE", updatedBy: user.username },
+      });
+
+      await logAuditEvent(
+        {
+          action: "FAMILY_RESTORED",
+          entityType: "Family",
+          entityId: familyDbId,
+          performedBy: user.username,
+          metadata: { familyId: family.familyId },
+        },
+        tx
+      );
+    });
+
+    revalidatePath("/families");
+    revalidatePath("/dashboard");
+    revalidatePath(`/families/${familyDbId}`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to restore family." };
+  }
+}
+
+/**
+ * Permanently hard-delete a family and all associated records from PostgreSQL (ADMIN ONLY).
+ * Frees up the family ID so it can be reused immediately.
+ */
+export async function deleteFamilyPermanentlyAction(familyDbId: string): Promise<{ success: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") {
+    return { success: false, error: "Access denied. Only administrators are authorized to permanently delete families from the database." };
+  }
+
+  try {
+    const family = await prisma.family.findUnique({
+      where: { id: familyDbId },
+      include: {
+        members: { select: { id: true, memberId: true } },
+      },
+    });
+
+    if (!family) {
+      return { success: false, error: "Family record not found in database." };
+    }
+
+    const memberIds = family.members.map((m) => m.memberId);
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Unlink circular headMemberId first
+      await tx.family.update({
+        where: { id: familyDbId },
+        data: { headMemberId: null },
+      });
+
+      // 2. Delete child records
+      if (memberIds.length > 0) {
+        await tx.googleSheetSync.deleteMany({
+          where: { memberId: { in: memberIds } },
+        });
+      }
+      await tx.birthdayMessageLog.deleteMany({
+        where: { familyId: familyDbId },
+      });
+      await tx.lavaajamRecord.deleteMany({
+        where: { familyId: familyDbId },
+      });
+      await tx.memberAccessRequest.deleteMany({
+        where: { familyId: familyDbId },
+      });
+      await tx.memberFormSubmission.deleteMany({
+        where: { familyId: familyDbId },
+      });
+      await tx.auditLog.deleteMany({
+        where: { entityId: familyDbId },
+      });
+
+      // 3. Delete all member records
+      await tx.member.deleteMany({
+        where: { familyId: familyDbId },
+      });
+
+      // 4. Delete the family record itself
+      await tx.family.delete({
+        where: { id: familyDbId },
+      });
+    });
+
+    revalidatePath("/families");
+    revalidatePath("/dashboard");
+    revalidatePath("/members");
+    return { success: true };
+  } catch (err: any) {
+    console.error("[PERMANENT_DELETE_FAMILY_ERROR]", err);
+    return { success: false, error: err?.message || "Failed to permanently delete family from database." };
+  }
+}
+
+/**
+ * Permanently hard-delete a single member from PostgreSQL (ADMIN ONLY).
+ */
+export async function deleteMemberPermanentlyAction(memberDbId: string): Promise<{ success: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") {
+    return { success: false, error: "Access denied. Only administrators are authorized to delete members." };
+  }
+
+  try {
+    const member = await prisma.member.findUnique({
+      where: { id: memberDbId },
+      include: { family: true },
+    });
+
+    if (!member) {
+      return { success: false, error: "Member not found." };
+    }
+
+    if (member.family.headMemberId === member.id) {
+      return {
+        success: false,
+        error: "Cannot delete the Head of Family directly. Please reassign the family head first or delete the entire family.",
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.googleSheetSync.deleteMany({
+        where: { memberId: member.memberId },
+      });
+      await tx.member.delete({
+        where: { id: memberDbId },
+      });
+    });
+
+    revalidatePath(`/families/${member.familyId}`);
+    revalidatePath("/members");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to permanently delete member." };
   }
 }
 

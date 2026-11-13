@@ -173,6 +173,7 @@ export const ChildInputSchema = z.object({
   age: z.coerce.number().int().min(0, "Age cannot be negative").max(100, "Age must be valid"),
   gender: GenderEnum.default("MALE"),
   bloodGroup: z.string().optional().nullable(),
+  whatsappNumber: z.string().optional().nullable(),
 });
 
 export type ChildInput = z.infer<typeof ChildInputSchema>;
@@ -187,8 +188,16 @@ export const MemberInputSchema = z
     relationship: RelationshipEnum,
     maritalStatus: MaritalStatusEnum.default("UNMARRIED"),
     husbandName: z.string().optional().nullable(),
+    husbandIsResident: z.boolean().optional().nullable(),
+    husbandAge: z.coerce.number().optional().nullable(),
+    husbandDateOfBirth: z.string().optional().nullable(),
+    husbandBloodGroup: z.string().optional().nullable(),
+    husbandContact: z.string().optional().nullable(),
     wifeName: z.string().optional().nullable(),
     wifeContact: z.string().optional().nullable(),
+    wifeAge: z.coerce.number().optional().nullable(),
+    wifeDateOfBirth: z.string().optional().nullable(),
+    wifeBloodGroup: z.string().optional().nullable(),
     residenceLocation: z.string().optional().nullable(),
     bloodGroup: z.string().optional().nullable(),
     sect: z.string().optional().nullable(),
