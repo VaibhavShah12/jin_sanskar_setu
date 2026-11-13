@@ -1073,3 +1073,99 @@ export async function lookupCrossSanghContactAction(contactNumber: string) {
     return { found: false };
   }
 }
+
+/**
+ * Search active families across any Sangh for cross-family linking (e.g. Maayka-Sasural linkage)
+ */
+export async function searchFamiliesForLinkingAction(query: string): Promise<{
+  success: boolean;
+  families?: Array<{
+    id: string;
+    familyId: string;
+    headName: string;
+    mobile: string;
+    area: string;
+    address: string;
+    sanghId: string;
+    sanghName: string;
+    sanghPrefix: string;
+  }>;
+  error?: string;
+}> {
+  const q = query.trim();
+  if (!q || q.length < 2) {
+    return { success: true, families: [] };
+  }
+
+  try {
+    const families = await prisma.family.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { familyId: { contains: q, mode: "insensitive" } },
+          { headName: { contains: q, mode: "insensitive" } },
+          { mobile: { contains: q } },
+          { normalizedMobile: { contains: q } },
+        ],
+      },
+      include: {
+        sangh: {
+          select: { name: true, prefix: true },
+        },
+      },
+      take: 8,
+      orderBy: { familyId: "asc" },
+    });
+
+    return {
+      success: true,
+      families: families.map((f) => ({
+        id: f.id,
+        familyId: f.familyId,
+        headName: f.headName,
+        mobile: f.mobile,
+        area: f.area,
+        address: f.address,
+        sanghId: f.sanghId,
+        sanghName: f.sangh.name,
+        sanghPrefix: f.sangh.prefix,
+      })),
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Search failed." };
+  }
+}
+
+/**
+ * Link a married daughter/sister to her Sasural family
+ */
+export async function linkMemberSasuralFamilyAction({
+  memberId,
+  husbandName,
+  sasuralFamilyId,
+  sasuralSanghName,
+  sasuralHeadName,
+}: {
+  memberId: string;
+  husbandName: string;
+  sasuralFamilyId: string;
+  sasuralSanghName: string;
+  sasuralHeadName: string;
+}): Promise<{ success: boolean; error?: string; updatedHusbandName?: string }> {
+  try {
+    const formattedHusband = `${husbandName.trim()} [Sasural: ${sasuralFamilyId} - ${sasuralHeadName}, ${sasuralSanghName}]`;
+
+    await prisma.member.update({
+      where: { id: memberId },
+      data: {
+        husbandName: formattedHusband,
+        maritalStatus: "MARRIED",
+      },
+    });
+
+    return { success: true, updatedHusbandName: formattedHusband };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to link Sasural family." };
+  }
+}
+

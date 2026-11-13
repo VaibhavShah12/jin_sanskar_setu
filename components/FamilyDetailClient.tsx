@@ -13,6 +13,8 @@ import {
   deleteMemberPermanentlyAction,
   sendFamilyIdCardsEmailAction,
   updateFamilyAndMembersAction,
+  searchFamiliesForLinkingAction,
+  linkMemberSasuralFamilyAction,
 } from "@/lib/actions/family-actions";
 import { submitCorrectionRequestAction } from "@/lib/actions/member-form-actions";
 import { sendDirectFamilyEmailAction } from "@/lib/actions/lavaajam-actions";
@@ -342,6 +344,105 @@ export default function FamilyDetailClient({
     }
   };
 
+  // Maayka-Sasural Linker State
+  const [sasuralTargetMember, setSasuralTargetMember] = useState<any | null>(null);
+  const [sasuralSearchQuery, setSasuralSearchQuery] = useState("");
+  const [sasuralSearchResults, setSasuralSearchResults] = useState<any[]>([]);
+  const [sasuralSearching, setSasuralSearching] = useState(false);
+  const [selectedSasuralFamily, setSelectedSasuralFamily] = useState<any | null>(null);
+  const [sasuralHusbandName, setSasuralHusbandName] = useState("");
+  const [savingSasuralLink, setSavingSasuralLink] = useState(false);
+  const [sasuralLinkMsg, setSasuralLinkMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleOpenLinkSasuralModal = (member: any) => {
+    setSasuralTargetMember(member);
+    setSasuralSearchQuery("");
+    setSasuralSearchResults([]);
+    setSelectedSasuralFamily(null);
+    const rawHusband = member.husbandName ? member.husbandName.split("[")[0].trim() : "";
+    setSasuralHusbandName(rawHusband);
+    setSasuralLinkMsg(null);
+  };
+
+  const handleSearchSasuralFamilies = async (q: string) => {
+    setSasuralSearchQuery(q);
+    if (q.trim().length < 2) {
+      setSasuralSearchResults([]);
+      return;
+    }
+    setSasuralSearching(true);
+    try {
+      const res = await searchFamiliesForLinkingAction(q);
+      if (res.success && res.families) {
+        setSasuralSearchResults(res.families.filter((f: any) => f.id !== family.id));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSasuralSearching(false);
+    }
+  };
+
+  const handleSaveSasuralLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sasuralTargetMember || !selectedSasuralFamily) return;
+    if (!sasuralHusbandName.trim()) {
+      alert("Please enter the husband's name.");
+      return;
+    }
+    setSavingSasuralLink(true);
+    setSasuralLinkMsg(null);
+    try {
+      const res = await linkMemberSasuralFamilyAction({
+        memberId: sasuralTargetMember.id,
+        husbandName: sasuralHusbandName,
+        sasuralFamilyId: selectedSasuralFamily.familyId,
+        sasuralSanghName: selectedSasuralFamily.sanghName,
+        sasuralHeadName: selectedSasuralFamily.headName,
+      });
+
+      if (res.success && res.updatedHusbandName) {
+        setSasuralLinkMsg({ type: "success", text: "Successfully linked to Sasural family!" });
+        setTimeout(() => {
+          setSasuralTargetMember(null);
+          router.refresh();
+        }, 1200);
+      } else {
+        setSasuralLinkMsg({ type: "error", text: res.error || "Failed to link Sasural family." });
+      }
+    } catch (err: any) {
+      setSasuralLinkMsg({ type: "error", text: err?.message || "An error occurred." });
+    } finally {
+      setSavingSasuralLink(false);
+    }
+  };
+
+  // Self-Service WhatsApp Update Link State
+  const [showWhatsAppUpdateModal, setShowWhatsAppUpdateModal] = useState(false);
+  const [copiedUpdateLink, setCopiedUpdateLink] = useState(false);
+
+  const getSelfServiceUpdateMessage = () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const cleanMobile = (family.mobile || "").replace(/[^0-9]/g, "").slice(-10);
+    const updateUrl = `${origin}/member-form?mobile=${cleanMobile}&familyId=${family.familyId}`;
+
+    return `जय जिनेन्द्र ${family.headName} जी,\n\nश्री ${family.sangh?.name || "संघ"} - जिन संस्कार सेतु\nपरिवार क्रमांक: ${family.familyId}\n\nकृपया अपने परिवार के सदस्यों की जानकारी, रक्त समूह (Blood Group), और सेवा रुचियों की समीक्षा या सुधार हेतु नीचे दिए गए अधिकृत लिंक पर क्लिक करें:\n\n👉 ${updateUrl}\n\n(इस लिंक द्वारा आप अपने घर बैठे परिवार का विवरण देख सकते हैं और आवश्यक सुधार सबमिट कर सकते हैं)\n\nसादर,\nश्री ${family.sangh?.name || "संघ"}`;
+  };
+
+  const handleCopyUpdateMessage = () => {
+    const msg = getSelfServiceUpdateMessage();
+    navigator.clipboard.writeText(msg);
+    setCopiedUpdateLink(true);
+    setTimeout(() => setCopiedUpdateLink(false), 2500);
+  };
+
+  const handleOpenDirectWhatsApp = () => {
+    const cleanMobile = (family.mobile || "").replace(/[^0-9]/g, "").slice(-10);
+    const msg = getSelfServiceUpdateMessage();
+    const encoded = encodeURIComponent(msg);
+    window.open(`https://wa.me/91${cleanMobile}?text=${encoded}`, "_blank");
+  };
+
   // Archive Family (ADMIN ONLY)
   const handleArchive = async () => {
     setArchiving(true);
@@ -486,6 +587,18 @@ export default function FamilyDetailClient({
                 title="Send official message to registered email"
               >
                 <i className="bi bi-envelope-at me-1 text-info"></i> Send Email
+              </button>
+            )}
+
+            {/* Self-Service WhatsApp Update Link */}
+            {family.mobile && (
+              <button
+                onClick={() => setShowWhatsAppUpdateModal(true)}
+                className="btn btn-outline-success btn-sm px-3 shadow-sm d-flex align-items-center gap-1 fw-semibold text-dark"
+                title="Share self-service family update link on WhatsApp"
+              >
+                <i className="bi bi-whatsapp text-success"></i>
+                <span>WhatsApp Update Link</span>
               </button>
             )}
 
@@ -726,10 +839,59 @@ export default function FamilyDetailClient({
                           )}
                         </div>
                       )}
-                      {m.husbandName && (
-                        <div className="small text-primary mt-1">
-                          <i className="bi bi-person-heart me-1"></i>
-                          Husband: <strong>{m.husbandName}</strong>
+                      {(m.relationship === "DAUGHTER" || m.relationship === "SISTER" || m.maritalStatus === "MARRIED") && (
+                        <div className="mt-1 small">
+                          {m.husbandName ? (
+                            <div>
+                              <span className="text-primary">
+                                <i className="bi bi-person-heart me-1"></i>
+                                Husband: <strong>{m.husbandName.split("[")[0].trim()}</strong>
+                              </span>
+                              {m.husbandName.includes("[Sasural:") ? (
+                                <div className="mt-1 d-flex flex-wrap align-items-center gap-1">
+                                  <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle" style={{ fontSize: "0.72rem" }}>
+                                    <i className="bi bi-link-45deg me-1"></i>
+                                    {m.husbandName.slice(m.husbandName.indexOf("[Sasural:"))}
+                                  </span>
+                                  {canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenLinkSasuralModal(m)}
+                                      className="btn btn-xs btn-outline-secondary py-0 px-1"
+                                      style={{ fontSize: "0.68rem" }}
+                                      title="Edit Sasural link"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                canEdit && (
+                                  <div className="mt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenLinkSasuralModal(m)}
+                                      className="btn btn-xs btn-outline-info py-0 px-2 d-inline-flex align-items-center gap-1"
+                                      style={{ fontSize: "0.72rem" }}
+                                    >
+                                      <i className="bi bi-link-45deg"></i> Link Sasural Family
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          ) : (
+                            canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenLinkSasuralModal(m)}
+                                className="btn btn-xs btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1"
+                                style={{ fontSize: "0.72rem" }}
+                              >
+                                <i className="bi bi-link-45deg"></i> Link Sasural Family
+                              </button>
+                            )
+                          )}
                         </div>
                       )}
                       {m.residenceLocation && (
@@ -853,10 +1015,59 @@ export default function FamilyDetailClient({
                       <i className="bi bi-whatsapp me-1"></i>{m.whatsappNumber}
                     </div>
                   )}
-                  {m.husbandName && (
-                    <div className="small text-primary mt-1">
-                      <i className="bi bi-person-heart me-1"></i>
-                      Husband: <strong>{m.husbandName}</strong>
+                  {(m.relationship === "DAUGHTER" || m.relationship === "SISTER" || m.maritalStatus === "MARRIED") && (
+                    <div className="mt-1 small">
+                      {m.husbandName ? (
+                        <div>
+                          <span className="text-primary">
+                            <i className="bi bi-person-heart me-1"></i>
+                            Husband: <strong>{m.husbandName.split("[")[0].trim()}</strong>
+                          </span>
+                          {m.husbandName.includes("[Sasural:") ? (
+                            <div className="mt-1 d-flex flex-wrap align-items-center gap-1">
+                              <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle" style={{ fontSize: "0.72rem" }}>
+                                <i className="bi bi-link-45deg me-1"></i>
+                                {m.husbandName.slice(m.husbandName.indexOf("[Sasural:"))}
+                              </span>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLinkSasuralModal(m)}
+                                  className="btn btn-xs btn-outline-secondary py-0 px-1"
+                                  style={{ fontSize: "0.68rem" }}
+                                  title="Edit Sasural link"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            canEdit && (
+                              <div className="mt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLinkSasuralModal(m)}
+                                  className="btn btn-xs btn-outline-info py-0 px-2 d-inline-flex align-items-center gap-1"
+                                  style={{ fontSize: "0.72rem" }}
+                                >
+                                  <i className="bi bi-link-45deg"></i> Link Sasural Family
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      ) : (
+                        canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenLinkSasuralModal(m)}
+                            className="btn btn-xs btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1"
+                            style={{ fontSize: "0.72rem" }}
+                          >
+                            <i className="bi bi-link-45deg"></i> Link Sasural Family
+                          </button>
+                        )
+                      )}
                     </div>
                   )}
                   {m.residenceLocation && (
@@ -1085,6 +1296,217 @@ export default function FamilyDetailClient({
                   <button type="submit" disabled={directSending} className="btn btn-info text-dark btn-sm px-4 fw-bold shadow-xs">
                     {directSending ? "Sending..." : "Send Email (ईमेल पाठवा)"}
                   </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          WHATSAPP SELF-SERVICE UPDATE LINK MODAL
+          ===================================================================== */}
+      {showWhatsAppUpdateModal && (
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 1055 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content rounded-4 border-0 shadow-lg">
+              <div className="modal-header bg-success text-white py-3 px-4">
+                <h5 className="modal-title fw-bold mb-0">
+                  <i className="bi bi-whatsapp me-2"></i>
+                  Share Family Self-Service Link on WhatsApp
+                </h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowWhatsAppUpdateModal(false)}></button>
+              </div>
+              <div className="modal-body p-4">
+                <div className="alert alert-success-subtle border-success-subtle small mb-3">
+                  <i className="bi bi-info-circle me-1"></i>
+                  This link allows <strong>{family.headName}</strong> to review and request updates for family members, blood groups, and seva interests directly on their mobile phone.
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-dark mb-1">Registered Contact Number:</label>
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text bg-light font-monospace">+91</span>
+                    <input
+                      type="text"
+                      className="form-control font-monospace"
+                      value={family.mobile}
+                      readOnly
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-dark mb-1">Pre-composed WhatsApp Message:</label>
+                  <textarea
+                    rows={8}
+                    className="form-control font-monospace small bg-light"
+                    readOnly
+                    value={getSelfServiceUpdateMessage()}
+                  ></textarea>
+                </div>
+
+                <div className="d-flex flex-column flex-sm-row justify-content-between gap-2 pt-2 border-top">
+                  <button
+                    type="button"
+                    onClick={handleCopyUpdateMessage}
+                    className="btn btn-outline-secondary btn-sm px-3 d-flex align-items-center justify-content-center gap-1"
+                  >
+                    <i className={`bi ${copiedUpdateLink ? "bi-check2-all text-success" : "bi-clipboard"}`}></i>
+                    <span>{copiedUpdateLink ? "Copied to Clipboard!" : "Copy Link & Message"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenDirectWhatsApp}
+                    className="btn btn-success btn-sm px-4 fw-semibold d-flex align-items-center justify-content-center gap-1"
+                  >
+                    <i className="bi bi-whatsapp"></i>
+                    <span>Open in WhatsApp</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MAAYKA-SASURAL CROSS-FAMILY LINKER MODAL
+          ===================================================================== */}
+      {sasuralTargetMember && (
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 1055 }} role="dialog">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content rounded-4 border-0 shadow-lg">
+              <div className="modal-header bg-primary text-white py-3 px-4">
+                <h5 className="modal-title fw-bold mb-0">
+                  <i className="bi bi-link-45deg me-2"></i>
+                  Link Sasural Family for {sasuralTargetMember.name}
+                </h5>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setSasuralTargetMember(null)}></button>
+              </div>
+              <form onSubmit={handleSaveSasuralLink}>
+                <div className="modal-body p-4">
+                  <div className="alert alert-info-subtle border-info-subtle small mb-3">
+                    <i className="bi bi-people me-1"></i>
+                    Linking {sasuralTargetMember.name} to her marital household preserves the family relationship across Sanghs without creating duplicate census member counts.
+                  </div>
+
+                  {sasuralLinkMsg && (
+                    <div className={`alert py-2 px-3 small d-flex align-items-center gap-2 mb-3 ${
+                      sasuralLinkMsg.type === "success" ? "alert-success" : "alert-danger"
+                    }`}>
+                      <i className={`bi ${sasuralLinkMsg.type === "success" ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill"}`}></i>
+                      <span>{sasuralLinkMsg.text}</span>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <label className="form-label small fw-bold text-dark mb-1">
+                      Husband&apos;s Name (पति का नाम) <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Rajesh Kumar Shah"
+                      className="form-control form-control-sm"
+                      value={sasuralHusbandName}
+                      onChange={(e) => setSasuralHusbandName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label small fw-bold text-dark mb-1">
+                      Search Sasural Family in Sangh (ससुराल परिवार खोजें) <span className="text-danger">*</span>
+                    </label>
+                    <div className="input-group input-group-sm mb-2">
+                      <span className="input-group-text"><i className="bi bi-search"></i></span>
+                      <input
+                        type="text"
+                        placeholder="Search by Family ID (e.g. SVJS-042), Head Name, or Mobile..."
+                        className="form-control"
+                        value={sasuralSearchQuery}
+                        onChange={(e) => handleSearchSasuralFamilies(e.target.value)}
+                      />
+                      {sasuralSearching && (
+                        <span className="input-group-text">
+                          <span className="spinner-border spinner-border-sm" role="status"></span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Search Results Dropdown */}
+                    {sasuralSearchResults.length > 0 && (
+                      <div className="list-group list-group-flush border rounded-3 overflow-auto" style={{ maxHeight: "200px" }}>
+                        {sasuralSearchResults.map((f) => {
+                          const isSelected = selectedSasuralFamily?.id === f.id;
+                          return (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSasuralFamily(f);
+                                setSasuralSearchQuery(`${f.familyId} - ${f.headName} (${f.sanghName})`);
+                                setSasuralSearchResults([]);
+                              }}
+                              className={`list-group-item list-group-item-action p-2 text-start small ${
+                                isSelected ? "bg-primary-subtle text-primary fw-semibold" : ""
+                              }`}
+                            >
+                              <div className="d-flex justify-content-between align-items-center">
+                                <strong>{f.familyId} — {f.headName}</strong>
+                                <span className="badge bg-light text-dark border">{f.sanghName}</span>
+                              </div>
+                              <div className="text-muted fs-8">
+                                Area: {f.area} • Mobile: {f.mobile}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {selectedSasuralFamily && (
+                      <div className="card bg-light border-primary p-2 mt-2 rounded-3 small">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div>
+                            <span className="badge bg-success mb-1">Selected Sasural Family</span>
+                            <div className="fw-bold text-dark">{selectedSasuralFamily.familyId} — {selectedSasuralFamily.headName}</div>
+                            <div className="text-muted">Sangh: {selectedSasuralFamily.sanghName} ({selectedSasuralFamily.sanghPrefix})</div>
+                            <div className="text-muted">Area: {selectedSasuralFamily.area}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-link text-danger p-0"
+                            onClick={() => {
+                              setSelectedSasuralFamily(null);
+                              setSasuralSearchQuery("");
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="d-flex justify-content-end gap-2 pt-3 border-top">
+                    <button
+                      type="button"
+                      className="btn btn-light btn-sm"
+                      onClick={() => setSasuralTargetMember(null)}
+                      disabled={savingSasuralLink}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingSasuralLink || !selectedSasuralFamily || !sasuralHusbandName.trim()}
+                      className="btn btn-primary btn-sm px-4 fw-semibold"
+                    >
+                      {savingSasuralLink ? "Linking..." : "Save Sasural Link"}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -1776,6 +2198,7 @@ export default function FamilyDetailClient({
           </div>
         </div>
       )}
+
       {/* Printable ID Cards Modal */}
       {showPrintCardsModal && (
         <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.65)", zIndex: 1060 }} role="dialog">
