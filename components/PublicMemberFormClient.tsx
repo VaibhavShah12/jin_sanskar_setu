@@ -176,6 +176,17 @@ export default function PublicMemberFormClient() {
       setLang(savedLang);
     }
 
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlMobile = urlParams.get("mobile");
+      if (urlMobile) {
+        const cleanMobile = urlMobile.replace(/[^0-9]/g, "");
+        if (cleanMobile.length >= 10) {
+          setMobile(cleanMobile.slice(-10));
+        }
+      }
+    }
+
     if (savedGrant) {
       setGrantToken(savedGrant);
       loadFamilyProfile(savedGrant);

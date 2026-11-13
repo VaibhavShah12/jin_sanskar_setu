@@ -113,8 +113,8 @@ export const INTEREST_CATEGORIES: InterestCategory[] = [
       },
       {
         key: "MANAGEMENT_ANUKAMPA",
-        label: "Food Eating Anukampa",
-        hindiLabel: "साधर्मिक भोजन / अनुकंपा सेवा",
+        label: "Sadharmik Bhakti",
+        hindiLabel: "साधर्मिक भक्ति",
         categoryId: "MANAGEMENT_VYAVASTHA",
         minAge: 14,
       },

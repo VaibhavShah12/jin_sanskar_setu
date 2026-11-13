@@ -128,6 +128,7 @@ export async function sendFamilyRegistrationEmail({
   memberIds,
   sanghName,
   membersList,
+  phone,
 }: {
   to: string;
   headName: string;
@@ -135,9 +136,14 @@ export async function sendFamilyRegistrationEmail({
   memberIds: string[];
   sanghName: string;
   membersList?: { name: string; relationship: string; memberId: string }[];
+  phone?: string;
 }): Promise<SendEmailResult> {
   const baseUrl = getAppBaseUrl();
-  const directLink = `${baseUrl}/member-portal?familyId=${encodeURIComponent(familyId)}`;
+  const cleanPhone = phone ? phone.replace(/[^0-9]/g, "") : "";
+  const memberFormLink =
+    cleanPhone && cleanPhone.length >= 10
+      ? `${baseUrl}/member-form?mobile=${encodeURIComponent(cleanPhone.slice(-10))}`
+      : `${baseUrl}/member-form`;
   const familyViewLink = `${baseUrl}/families/${encodeURIComponent(familyId)}`;
 
   const subject = `जय जिनेन्द्र - Jin Sanskar Setu Family Registration Confirmed [${familyId}]`;
@@ -218,13 +224,31 @@ export async function sendFamilyRegistrationEmail({
               </span>
             </div>
 
-            <!-- Registration Certificate Note (Zero Redirection) -->
+            <!-- Member Form Direct Access Box (No QR Scan Needed) -->
+            <div style="background-color: #f0fdf4; border: 2px solid #86efac; border-radius: 10px; padding: 20px; text-align: center; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+              <div style="font-size: 15px; font-weight: 800; color: #15803d; margin-bottom: 6px;">
+                📋 सदस्य सेवा एवं रुचि प्रपत्र (Member Seva &amp; Interest Form)
+              </div>
+              <p style="font-size: 13px; color: #334155; margin: 0 0 14px 0; line-height: 1.6;">
+                <strong>QR कोड स्कैन करने की आवश्यकता नहीं है!</strong> अपने परिवार के सभी सदस्यों की धार्मिक सेवा रुचियां (जैसे वैयावच्च, साधर्मिक भक्ति आदि) दर्ज करने हेतु सीधे नीचे दिए गए बटन पर क्लिक करें:
+              </p>
+              <div style="margin: 14px 0;">
+                <a href="${memberFormLink}" style="background-color: #0d5c3a; color: #ffffff; text-decoration: none; padding: 13px 26px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 2px 6px rgba(13,92,58,0.25);">
+                  👉 सदस्य सेवा प्रपत्र खोलें (Open Member Form)
+                </a>
+              </div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 6px; word-break: break-all;">
+                सीधा लिंक: <a href="${memberFormLink}" style="color: #0d5c3a; font-weight: 600;">${memberFormLink}</a>
+              </div>
+            </div>
+
+            <!-- Registration Certificate Note -->
             <div style="background-color: #f8fafc; border: 1.5px dashed #0d5c3a; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px;">
               <div style="font-size: 13px; font-weight: 700; color: #0d5c3a; margin-bottom: 4px;">
                 📜 स्थायी डिजिटल अभिलेख प्रमाण पत्र (Official Registration Record)
               </div>
               <p style="margin: 0; font-size: 12px; color: #475569; line-height: 1.6;">
-                यह पुष्टि पत्र संघ के स्थायी डिजिटल रजिस्टर में दर्ज हो चुका है। कृपया अपने <strong>Family ID</strong> एवं नीचे दिए गए <strong>Member IDs</strong> को भविष्य के संदर्भ हेतु सुरक्षित रखें। किसी बाहरी वेबसाइट पर जाने की आवश्यकता नहीं है।
+                यह पुष्टि पत्र संघ के स्थायी डिजिटल रजिस्टर में दर्ज हो चुका है। कृपया अपने <strong>Family ID</strong> एवं नीचे दिए गए <strong>Member IDs</strong> को भविष्य के संदर्भ हेतु सुरक्षित रखें।
               </p>
             </div>
 
@@ -269,8 +293,8 @@ export async function sendFamilyRegistrationEmail({
 आपके परिवार का पंजीकरण ${sanghName} में सफलतापूर्वक संपन्न हो गया है।
 Family ID: ${familyId}
 
-सीधा पोर्टल लिंक (No QR needed):
-${directLink}
+सदस्य सेवा प्रपत्र लिंक (No QR needed):
+${memberFormLink}
 
 पंजीकृत सदस्य संख्या (Member IDs):
 ${memberIds.join(", ")}

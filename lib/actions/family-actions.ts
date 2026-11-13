@@ -303,6 +303,7 @@ export async function createFamilyAction(
           memberIds: result.allMemberIds,
           sanghName: sangh.name,
           membersList,
+          phone: data.mobile || data.headWhatsappNumber || undefined,
         });
         if (!emailDispatchResult.success) {
           console.error("[EMAIL_DISPATCH_WARNING] Registration email was not dispatched:", emailDispatchResult.error);

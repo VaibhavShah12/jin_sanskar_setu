@@ -18,15 +18,12 @@ export type FormLanguage = "en" | "hi" | "gu";
 
 export const FORM_TRANSLATIONS = {
   en: {
-    step1Title: "Section 1: Family Information",
-    step1Desc: "Enter the primary household information and select the corresponding Sangh.",
-    step2Title: "Section 2: Additional Household Members",
-    step2Desc: "Add all other living family members residing in this household.",
-    step3Title: "Review & Confirm Family Survey",
-    step3Desc: "Please carefully review all entered family details before final submission.",
-    step1Tab: "Family Details",
-    step2Tab: "Members",
-    step3Tab: "Review & Submit",
+    step1Title: "Section 1: Family & Head Information",
+    step1Desc: "Enter the primary household information and add all living family members residing in this household.",
+    step2Title: "Review & Confirm Family Survey",
+    step2Desc: "Please carefully review all entered family details before final submission.",
+    step1Tab: "Family & Members",
+    step2Tab: "Review & Submit",
     sangh: "Sangh",
     mobile: "Mobile Number",
     mobileHint: "Primary contact for Sangh communications.",
@@ -67,15 +64,12 @@ export const FORM_TRANSLATIONS = {
     mobileDuplicate: "This mobile number is already registered under:",
   },
   hi: {
-    step1Title: "भाग 1: परिवार की सामान्य जानकारी",
-    step1Desc: "परिवार की मुख्य जानकारी दर्ज करें और संबंधित संघ चुनें।",
-    step2Title: "भाग 2: परिवार के अन्य सदस्य",
-    step2Desc: "घर में रहने वाले अन्य सभी सदस्यों का विवरण जोड़ें।",
-    step3Title: "समीक्षा एवं पुष्टि (Review)",
-    step3Desc: "अंतिम सबमिशन से पहले दर्ज की गई जानकारी की जांच कर लें।",
-    step1Tab: "परिवार विवरण",
-    step2Tab: "सदस्य",
-    step3Tab: "समीक्षा एवं सबमिट",
+    step1Title: "भाग 1: परिवार एवं मुखिया का विवरण",
+    step1Desc: "परिवार के मुखिया, निवास स्थान एवं घर के सभी सदस्यों की जानकारी दर्ज करें।",
+    step2Title: "समीक्षा एवं पुष्टि (Review & Submit)",
+    step2Desc: "अंतिम सबमिशन से पहले दर्ज की गई सम्पूर्ण जानकारी की जांच कर लें।",
+    step1Tab: "परिवार व सदस्य",
+    step2Tab: "समीक्षा एवं सबमिट",
     sangh: "संघ",
     mobile: "मोबाइल नंबर",
     mobileHint: "संघ के संपर्क और सूचनाओं के लिए मुख्य मोबाइल नंबर।",
@@ -116,15 +110,12 @@ export const FORM_TRANSLATIONS = {
     mobileDuplicate: "यह मोबाइल नंबर पहले से इस परिवार में पंजीकृत है:",
   },
   gu: {
-    step1Title: "વિભાગ 1: કુટુંબની પ્રાથમિક વિગતો",
-    step1Desc: "કુટુંબની મુખ્ય માહિતી દાખલ કરો અને સંબંધિત સંઘ પસંદ કરો.",
-    step2Title: "વિભાગ 2: ઘરના અન્ય સભ્યો",
-    step2Desc: "આ ઘરમાં રહેતા અન્ય તમામ સભ્યોની વિગતો ઉમેરો.",
-    step3Title: "ચકાસણી અને પુષ્ટિ (Review)",
-    step3Desc: "અંતિમ સબમિશન પહેલાં ભરેલી વિગતો ધ્યાનપૂર્વક ચકાસી લો.",
-    step1Tab: "કુટુંબ વિગતો",
-    step2Tab: "સભ્યો",
-    step3Tab: "ચકાસણી & સબમિટ",
+    step1Title: "વિભાગ 1: કુટુંબ અને વડાની વિગતો",
+    step1Desc: "કુટુંબના વડા, સરનામું અને ઘરના તમામ સભ્યોની વિગતો દાખલ કરો.",
+    step2Title: "ચકાસણી અને પુષ્ટિ (Review & Submit)",
+    step2Desc: "અંતિમ સબમિશન પહેલાં ભરેલી વિગતો ધ્યાનપૂર્વક ચકાસી લો.",
+    step1Tab: "કુટુંબ અને સભ્યો",
+    step2Tab: "ચકાસણી & સબમિટ",
     sangh: "સંઘ",
     mobile: "મોબાઈલ નંબર",
     mobileHint: "સંઘ સાથેના સંપર્ક માટેનો મુખ્ય નંબર.",
@@ -631,7 +622,18 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
   // Handle Next
   const handleNext = async () => {
     if (currentStep === 1) {
-      if (!validateStep1()) return;
+      if (!validateStep1()) {
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
+      }
+      if (!validateStep2()) {
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
+      }
       // Pre-check duplicate on step 1 only if mobile is present
       const rawMobile = formData.headWhatsappNumber || formData.mobile || "";
       if (rawMobile && rawMobile.replace(/[^0-9]/g, "").length >= 10) {
@@ -647,6 +649,9 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           const data = await res.json();
           if (data.isExactFamilyDuplicate && data.existingFamily) {
             setDuplicateData(data.existingFamily);
+            if (typeof window !== "undefined") {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
             return;
           } else {
             setDuplicateData(null);
@@ -655,16 +660,19 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           console.warn("Duplicate pre-check skipped due to network:", err);
         }
       }
-      setCurrentStep(2);
-    } else if (currentStep === 2) {
-      if (!validateStep2()) return;
-      setCurrentStep(3); // Review step
+      setCurrentStep(2); // Move to Review & Submit
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
   };
 
   const handlePrev = () => {
     setErrorMsg(null);
-    setCurrentStep((prev) => Math.max(1, prev - 1));
+    setCurrentStep(1);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   // Final Submission
@@ -860,13 +868,9 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             <div className="form-step-circle">1</div>
             <span className="form-step-label">{t.step1Tab}</span>
           </div>
-          <div className={`form-step-item ${currentStep === 2 ? "form-step-active" : currentStep > 2 ? "form-step-completed" : ""}`}>
+          <div className={`form-step-item ${currentStep === 2 ? "form-step-active" : ""}`}>
             <div className="form-step-circle">2</div>
             <span className="form-step-label">{t.step2Tab}</span>
-          </div>
-          <div className={`form-step-item ${currentStep === 3 ? "form-step-active" : ""}`}>
-            <div className="form-step-circle">3</div>
-            <span className="form-step-label">{t.step3Tab}</span>
           </div>
         </div>
       </nav>
@@ -907,10 +911,11 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
       )}
 
       {/* =====================================================================
-          STEP 1: FAMILY DETAILS
+          STEP 1: FAMILY & MEMBERS ENTRY (ALL-IN-ONE)
           ===================================================================== */}
       {currentStep === 1 && (
-        <div className="step-container">
+        <>
+          <div className="step-container">
           <h4 className="fw-bold text-dark mb-1">{t.step1Title}</h4>
           <p className="text-muted small mb-4">
             {t.step1Desc}
@@ -1218,18 +1223,16 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             )}
           </div>
         </div>
-      )}
 
-      {/* =====================================================================
-          STEP 2: FAMILY MEMBERS
-          ===================================================================== */}
-      {currentStep === 2 && (
-        <div className="step-container">
+        {/* =====================================================================
+            SECTION 2: HOUSEHOLD MEMBERS DETAILS (RENDERED ON STEP 1)
+            ===================================================================== */}
+        <div className="step-container mt-4">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <h4 className="fw-bold text-dark mb-0">Section 2: Family Members Details</h4>
+              <h4 className="fw-bold text-dark mb-0">भाग 2: परिवार के अन्य सदस्य (Section 2: Household Members)</h4>
               <p className="text-muted small mb-0">
-                Contact numbers can be filled by each member (not compulsory). For married daughters or sisters, husband&apos;s name and contact number are required.
+                घर के सभी अन्य सदस्यों (पत्नी, पुत्र, पुत्रवधू, बच्चे आदि) का विवरण यहाँ जोड़ें।
               </p>
             </div>
             <button
@@ -1941,16 +1944,17 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* =====================================================================
-          STEP 3: REVIEW BEFORE SUBMIT
+          STEP 2: REVIEW BEFORE SUBMIT
           ===================================================================== */}
-      {currentStep === 3 && (
+      {currentStep === 2 && (
         <div className="step-container">
-          <h4 className="fw-bold text-dark mb-1">Review & Confirm Family Survey</h4>
+          <h4 className="fw-bold text-dark mb-1">{t.step2Title}</h4>
           <p className="text-muted small mb-4">
-            Please carefully review all entered family details before final submission.
+            {t.step2Desc}
           </p>
 
           {/* Member Duplicate Warnings */}
@@ -2252,13 +2256,13 @@ export default function FamilyForm({ sanghs, userSanghId, userUsername }: Family
           </Link>
         )}
 
-        {currentStep < 3 ? (
+        {currentStep === 1 ? (
           <button
             type="button"
             onClick={handleNext}
-            className="btn btn-jain-primary px-4 py-2"
+            className="btn btn-jain-primary px-4 py-2 fw-semibold shadow-sm"
           >
-            {t.next} <i className="bi bi-arrow-right ms-1"></i>
+            <span>👉 {t.next} (समीक्षा एवं पुष्टि)</span> <i className="bi bi-arrow-right ms-1"></i>
           </button>
         ) : (
           <button
